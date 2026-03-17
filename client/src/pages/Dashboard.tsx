@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Flame, Clock, Eye, CheckCircle2, Plus, MessageCircle, MoreHorizontal } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import AddDealModal from '../components/AddDealModal'
+import { getWhatsAppLink } from '../lib/utils'
+import { useDeals, Deal } from '../hooks/useDeals'
 
 const MetricCard = ({ icon, label, count, color, bg }: { icon: React.ReactNode, label: string, count: string, color: string, bg: string }) => (
   <div className={`flex-shrink-0 w-40 p-4 rounded-3xl border border-white/5 ${bg} space-y-3`}>
@@ -16,7 +18,7 @@ const MetricCard = ({ icon, label, count, color, bg }: { icon: React.ReactNode, 
   </div>
 )
 
-const DealCard = ({ name, summary, time, status, amount, color }: any) => (
+const DealCard = ({ name, summary, time, status, amount, color, phone }: any) => (
   <motion.div 
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -49,9 +51,15 @@ const DealCard = ({ name, summary, time, status, amount, color }: any) => (
        <button className="flex-1 py-2 bg-surface-2 rounded-xl text-xs font-bold text-text-muted hover:text-text-primary transition-colors flex items-center justify-center gap-1.5">
          <Clock size={14} /> Snooze
        </button>
-       <button className="flex-1 py-2 bg-accent/10 rounded-xl text-xs font-bold text-accent hover:bg-accent/20 transition-colors flex items-center justify-center gap-1.5">
+       <a 
+          href={getWhatsAppLink(phone || '2348000000000', `Hi ${name}! Sabi here...`)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 py-2 bg-accent/10 rounded-xl text-xs font-bold text-accent hover:bg-accent/20 transition-colors flex items-center justify-center gap-1.5"
+          onClick={(e) => e.stopPropagation()}
+       >
          <MessageCircle size={14} /> Reply
-       </button>
+       </a>
     </div>
   </motion.div>
 )
@@ -59,25 +67,25 @@ const DealCard = ({ name, summary, time, status, amount, color }: any) => (
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('follow-up')
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const { deals, loading } = useDeals()
 
   const metrics = [
-    { icon: <Flame size={16} />, label: 'Hot Leads', count: '12', color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
-    { icon: <Clock size={16} />, label: 'Waiting', count: '4', color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
-    { icon: <Eye size={16} />, label: 'Pending', count: '15', color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
-    { icon: <CheckCircle2 size={16} />, label: 'Revenue', count: '₦1.2M', color: 'text-accent', bg: 'bg-accent/5 border-accent/10' },
+    { icon: <Flame size={16} />, label: 'Hot Leads', count: deals.filter((d: Deal) => d.status === 'pending').length.toString(), color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
+    { icon: <Clock size={16} />, label: 'Waiting', count: deals.filter((d: Deal) => d.status === 'inquiry').length.toString(), color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
+    { icon: <Eye size={16} />, label: 'Pending', count: deals.filter((d: Deal) => d.status === 'waiting_payment').length.toString(), color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
+    { icon: <CheckCircle2 size={16} />, label: 'Revenue', count: `₦${deals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (d.amount || 0), 0) / 1000000}M`, color: 'text-accent', bg: 'bg-accent/5 border-accent/10' },
   ]
 
-  const followUpDeals = [
-    { name: 'Chidinma', summary: 'Waiting for blue fabric choice', time: '14h ago', status: 'pending', amount: '₦15,000', color: 'text-accent' },
-    { name: 'Emeka', summary: 'Asking for logistics to Abuja', time: '18h ago', status: 'inquiry', amount: '₦4,500', color: 'text-hot' },
-    { name: 'Ayo', summary: 'Needs size 44 in black', time: '22h ago', status: 'inquiry', amount: '₦22,000', color: 'text-blue-400' },
-  ]
+  // Follow up = inquiry or pending
+  const followUpDeals = deals.filter((d: Deal) => d.status === 'inquiry' || d.status === 'pending')
 
-  const allDeals = [
-    ...followUpDeals,
-    { name: 'Blessing', summary: 'Order confirmed', time: '2d ago', status: 'paid', amount: '₦45,000', color: 'text-green-500' },
-    { name: 'Kunle', summary: 'Sample sent', time: '3d ago', status: 'pending', amount: '₦0', color: 'text-text-muted' },
-  ]
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-10 pt-4">
@@ -121,9 +129,17 @@ const Dashboard: React.FC = () => {
               className="space-y-4"
             >
               {followUpDeals.length > 0 ? (
-                followUpDeals.map((d, i) => (
-                  <Link key={i} to={`/deals/${i}`}>
-                    <DealCard {...d} className="mb-4" />
+                followUpDeals.map((d: Deal) => (
+                  <Link key={d.id} to={`/deals/${d.id}`}>
+                    <DealCard 
+                      name={d.contacts?.name || 'Unknown'} 
+                      summary={d.summary} 
+                      time={new Date(d.created_at).toLocaleDateString()} 
+                      status={d.status} 
+                      amount={`₦${d.amount?.toLocaleString()}`} 
+                      phone={d.contacts?.phone}
+                      color="text-accent" 
+                    />
                   </Link>
                 ))
               ) : (
@@ -151,9 +167,17 @@ const Dashboard: React.FC = () => {
                    </button>
                  ))}
               </div>
-              {allDeals.map((d, i) => (
-                 <Link key={i} to={`/deals/${i}`}>
-                   <DealCard {...d} />
+              {deals.map((d: Deal) => (
+                 <Link key={d.id} to={`/deals/${d.id}`}>
+                   <DealCard 
+                     name={d.contacts?.name || 'Unknown'} 
+                     summary={d.summary} 
+                     time={new Date(d.created_at).toLocaleDateString()} 
+                     status={d.status} 
+                     amount={`₦${d.amount?.toLocaleString()}`} 
+                     phone={d.contacts?.phone}
+                     color="text-accent" 
+                   />
                  </Link>
               ))}
             </motion.div>

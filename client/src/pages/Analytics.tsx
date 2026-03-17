@@ -5,6 +5,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, Cell, PieChart, Pie 
 } from 'recharts'
+import { useAnalytics } from '../hooks/useAnalytics'
+import { useDeals, Deal } from '../hooks/useDeals'
 
 const AnalyticsCard = ({ icon, label, value, trend, trendColor }: any) => (
   <div className="bg-surface p-5 rounded-3xl border border-white/5 space-y-4 shadow-xl">
@@ -26,31 +28,42 @@ const AnalyticsCard = ({ icon, label, value, trend, trendColor }: any) => (
 )
 
 const Analytics: React.FC = () => {
-  const revenueData = [
-    { week: 'W1', amount: 120000 },
-    { week: 'W2', amount: 250000 },
-    { week: 'W3', amount: 180000 },
-    { week: 'W4', amount: 480000 },
-    { week: 'W5', amount: 320000 },
-    { week: 'W6', amount: 640000 },
-    { week: 'W7', amount: 420000 },
-    { week: 'W8', amount: 890000 },
-  ]
+  const { summary, loading: summaryLoading } = useAnalytics()
+  const { deals, loading: dealsLoading } = useDeals()
 
+  // Derived status data for chart
   const statusData = [
-    { name: 'Inquiry', value: 45, color: '#facc15' },
-    { name: 'Pending', value: 30, color: '#25D366' },
-    { name: 'Paid', value: 15, color: '#4CAF50' },
-    { name: 'Ghosted', value: 10, color: '#FF6B35' },
+    { name: 'Inquiry', value: deals.filter((d: Deal) => d.status === 'inquiry').length, color: '#facc15' },
+    { name: 'Pending', value: deals.filter((d: Deal) => d.status === 'pending').length, color: '#25D366' },
+    { name: 'Paid', value: deals.filter((d: Deal) => d.status === 'paid').length, color: '#4CAF50' },
+    { name: 'Ghosted', value: deals.filter((d: Deal) => d.status === 'ghosted').length, color: '#FF6B35' },
   ]
 
-  const topCustomers = [
-    { name: 'Chidinma O.', amount: 450000 },
-    { name: 'Kunle A.', amount: 320000 },
-    { name: 'Blessing F.', amount: 280000 },
-    { name: 'Emeka T.', amount: 210000 },
-    { name: 'Musa D.', amount: 180000 },
+  // Derived top customers
+  const customerRevenue: Record<string, { name: string, amount: number }> = {}
+  deals.filter((d: Deal) => d.status === 'paid').forEach((d: Deal) => {
+    const name = d.contacts?.name || 'Unknown'
+    if (!customerRevenue[name]) customerRevenue[name] = { name, amount: 0 }
+    customerRevenue[name].amount += (d.amount || 0)
+  })
+  
+  const topCustomers = Object.values(customerRevenue)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5)
+
+  // Revenue data (mocked weekly for now until we have more dates)
+  const revenueData = [
+    { week: 'W1', amount: 0 },
+    { week: 'W2', amount: summary?.revenue || 0 },
   ]
+
+  if (summaryLoading || dealsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-24 pt-4">
@@ -64,10 +77,10 @@ const Analytics: React.FC = () => {
 
       {/* Grid Metrics */}
       <div className="grid grid-cols-2 gap-4 mb-8">
-        <AnalyticsCard icon={<TrendingUp size={20} />} label="Total Deals" value="84" trend="+12%" trendColor="text-accent" />
-        <AnalyticsCard icon={<ShieldCheck size={20} />} label="Closed" value="38" trend="+5%" trendColor="text-accent" />
-        <AnalyticsCard icon={<DollarSign size={20} />} label="Revenue" value="₦2.4M" trend="+18%" trendColor="text-accent" />
-        <AnalyticsCard icon={<Ghost size={20} />} label="Ghosted" value="12" trend="-2%" trendColor="text-hot" />
+        <AnalyticsCard icon={<TrendingUp size={20} />} label="Total Deals" value={summary?.totalDeals || 0} trend="+0%" trendColor="text-accent" />
+        <AnalyticsCard icon={<ShieldCheck size={20} />} label="Closed" value={summary?.closedDeals || 0} trend="+0%" trendColor="text-accent" />
+        <AnalyticsCard icon={<DollarSign size={20} />} label="Revenue" value={`₦${(summary?.revenue || 0).toLocaleString()}`} trend="+0%" trendColor="text-accent" />
+        <AnalyticsCard icon={<Ghost size={20} />} label="Ghosted" value={summary?.ghosted || 0} trend="-0%" trendColor="text-hot" />
       </div>
 
       {/* Sabi Recovered Highlight */}
@@ -83,16 +96,18 @@ const Analytics: React.FC = () => {
              <ShieldCheck size={24} /> Sabi Recovered
           </h3>
           <p className="text-lg font-medium leading-relaxed mb-4">
-             "This month, Sabi reminded you about 14 leads. You followed up on 9. That's ₦340,000 you almost lost. 💚"
+             "You closed {summary?.closedDeals} deals this month. Sabi helped you stay on top of {summary?.totalDeals} conversations. 💚"
           </p>
           <div className="flex gap-4">
              <div className="flex-1 bg-white/5 rounded-2xl p-4">
-                <div className="text-xs text-text-muted font-bold uppercase mb-1">Followed Up</div>
-                <div className="text-2xl font-mono font-bold">9 / 14</div>
+                <div className="text-xs text-text-muted font-bold uppercase mb-1">Success Rate</div>
+                <div className="text-2xl font-mono font-bold">
+                  {summary?.totalDeals ? Math.round((summary.closedDeals / summary.totalDeals) * 100) : 0}%
+                </div>
              </div>
              <div className="flex-1 bg-white/5 rounded-2xl p-4">
-                <div className="text-xs text-text-muted font-bold uppercase mb-1">Recovery Rate</div>
-                <div className="text-2xl font-mono font-bold">64%</div>
+                <div className="text-xs text-text-muted font-bold uppercase mb-1">Revenue</div>
+                <div className="text-xl font-mono font-bold">₦{(summary?.revenue || 0).toLocaleString()}</div>
              </div>
           </div>
         </div>
@@ -145,8 +160,8 @@ const Analytics: React.FC = () => {
             {topCustomers.map((c, i) => (
                <div key={i} className="flex justify-between items-center">
                   <div className="flex items-center gap-3">
-                     <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center font-bold text-xs">
-                        {c.name.split(' ')[0][0]}{c.name.split(' ')[1][0]}
+                     <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center font-bold text-xs uppercase">
+                        {c.name.substring(0, 2)}
                      </div>
                      <span className="text-sm font-bold">{c.name}</span>
                   </div>

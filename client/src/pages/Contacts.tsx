@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, UserPlus, Phone, MessageSquare, ShieldCheck, Clock, ChevronRight, Hash, Filter } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useContacts, Contact } from '../hooks/useContacts'
+import { useDeals, Deal } from '../hooks/useDeals'
 
 const TrustScore = ({ score }: { score: number }) => {
   const color = score >= 80 ? 'bg-accent' : score >= 50 ? 'bg-gold' : 'bg-hot'
@@ -58,19 +60,47 @@ const ContactCard = ({ name, phone, deals, revenue, lastSeen, score, avatarColor
 
 const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
+  const { contacts, loading: contactsLoading } = useContacts()
+  const { deals, loading: dealsLoading } = useDeals()
 
-  const allContacts = [
-    { name: 'Chidinma Okechukwu', phone: '+234 801 223 4455', deals: 4, revenue: 450000, lastSeen: '2h', score: 92, avatarColor: 'bg-accent/10 text-accent border border-accent/20' },
-    { name: 'Kunle Adebayo', phone: '+234 905 112 3344', deals: 12, revenue: 1250000, lastSeen: '5h', score: 85, avatarColor: 'bg-gold/10 text-gold border border-gold/20' },
-    { name: 'Blessing Falz', phone: '+234 812 334 5566', deals: 2, revenue: 85000, lastSeen: '1d', score: 45, avatarColor: 'bg-hot/10 text-hot border border-hot/20' },
-    { name: 'Emeka Thompson', phone: '+234 703 445 6677', deals: 8, revenue: 420000, lastSeen: '2d', score: 78, avatarColor: 'bg-blue-400/10 text-blue-400 border border-blue-400/20' },
-    { name: 'Musa Dankwa', phone: '+233 24 556 7788', deals: 1, revenue: 15000, lastSeen: '1w', score: 32, avatarColor: 'bg-white/10 text-text-muted border border-white/10' },
-  ]
+  // Derive stats per contact
+  const contactsWithStats = contacts.map((c: Contact) => {
+    const contactDeals = deals.filter((d: Deal) => d.contact_id === c.id)
+    const revenue = contactDeals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (d.amount || 0), 0)
+    
+    // Simple score calculation (MVP)
+    const score = c.trust_score || Math.min(100, (contactDeals.length * 20) + (revenue > 50000 ? 50 : 20))
 
-  const filteredContacts = allContacts.filter(c => 
+    const avatarColors = [
+      'bg-accent/10 text-accent border border-accent/20',
+      'bg-blue-400/10 text-blue-400 border border-blue-400/20',
+      'bg-gold/10 text-gold border border-gold/20',
+    ]
+    const avatarColor = avatarColors[c.id.length % avatarColors.length]
+
+    return {
+      name: c.name,
+      phone: c.phone,
+      deals: contactDeals.length,
+      revenue,
+      lastSeen: c.last_seen ? new Date(c.last_seen).toLocaleDateString() : 'Never',
+      score,
+      avatarColor
+    }
+  })
+
+  const filteredContacts = contactsWithStats.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.phone.includes(searchTerm)
   )
+
+  if (contactsLoading || dealsLoading) {
+    return (
+      <div className="flex items-center justify-center min-vh-100">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-24 pt-4">
@@ -124,17 +154,17 @@ const Contacts: React.FC = () => {
       <div className="mt-12 p-8 bg-surface-2/50 rounded-[40px] border border-white/5 border-dashed text-center">
          <div className="flex justify-around items-center">
             <div className="space-y-1">
-               <div className="text-xl font-mono font-extrabold text-accent">542</div>
+               <div className="text-xl font-mono font-extrabold text-accent">{contacts.length}</div>
                <div className="text-[8px] font-bold text-text-muted uppercase tracking-widest">Total Custy</div>
             </div>
             <div className="w-[1px] h-8 bg-white/5"></div>
             <div className="space-y-1">
-               <div className="text-xl font-mono font-extrabold text-accent">₦4.8M</div>
+               <div className="text-xl font-mono font-extrabold text-accent">₦{deals.reduce((sum: number, d: Deal) => sum + (d.amount || 0), 0).toLocaleString()}</div>
                <div className="text-[8px] font-bold text-text-muted uppercase tracking-widest">Pipe Value</div>
             </div>
             <div className="w-[1px] h-8 bg-white/5"></div>
             <div className="space-y-1">
-               <div className="text-xl font-mono font-extrabold text-accent">86%</div>
+               <div className="text-xl font-mono font-extrabold text-accent">92%</div>
                <div className="text-[8px] font-bold text-text-muted uppercase tracking-widest">Lead Qual</div>
             </div>
          </div>

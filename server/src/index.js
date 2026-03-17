@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 import morgan from 'morgan';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import rateLimit from 'express-rate-limit';
+import axios from 'axios';
+import { sendOTP, sendSMS } from './utils/notifications.js';
 
 dotenv.config();
 
@@ -25,90 +28,150 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Authentication Middleware
+const authMiddleware = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No authorization header' });
+
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+
+  if (error || !user) return res.status(401).json({ error: 'Invalid or expired token' });
+
+  req.user = user;
+  next();
+};
+
+const aiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: { error: 'Too many AI requests' }
+});
+
 // --- ROUTES ---
 
-// 1. AI Deal Extraction
-app.post('/api/ai/extract-deal', async (req, res) => {
-  const { chatText } = req.body;
-
-  if (!chatText) {
-    return res.status(400).json({ error: 'No chat text provided' });
+// 0. Auth
+app.post('/api/auth/send-otp', async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Phone required' });
+  try {
+    await sendOTP(phone);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed' });
   }
+});
+
+// 1. AI Extraction
+app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res) => {
+  const { chatText } = req.body;
+  if (!chatText) return res.status(400).json({ error: 'No text' });
 
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: `You are Sabi, a sales assistant for African SME vendors in Nigeria, Ghana, and Kenya. 
-          Analyse this WhatsApp conversation and return ONLY a JSON object with: 
-          is_deal (boolean), item (string or null), price (number or null), 
-          currency (string, default 'NGN'), customer_name (string or null), 
-          customer_constraint (string or null), summary (string, 2 sentences, plain English), 
-          suggested_reply (string, casual warm WhatsApp message, Nigerian friendly tone), 
-          intent ('hot_lead' | 'cold' | 'ready_to_pay' | 'browsing'). 
-          Return only valid JSON. No markdown.`
-        },
+        { role: "system", content: 'Analyze chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply, intent }' },
         { role: "user", content: chatText }
       ],
       response_format: { type: "json_object" }
     });
-
-    const result = JSON.parse(response.choices[0].message.content);
-    res.json(result);
+    res.json(JSON.parse(response.choices[0].message.content));
   } catch (error) {
-    console.error('AI Extraction error:', error);
-    res.status(500).json({ error: 'Failed to analyze chat' });
+    res.status(500).json({ error: 'AI error' });
   }
 });
 
-// 2. WhatsApp Webhook (Stub)
+// 2. WhatsApp Webhook
 app.post('/api/webhook/whatsapp', async (req, res) => {
-  console.log('Incoming WhatsApp Webhook:', req.body);
-  
-  // Replace with 360dialog or Twilio webhook handler
-  // 1. Parse incoming message body
-  // 2. Find or create contact
-  // 3. Run AI intent extraction
-  // 4. Auto-create deal if commercial intent
-  // 5. Fire FCM push notification to Sabi frontend
-  
-  res.status(200).json({ status: 'received' });
+  const { body, from } = req.body;
+  try {
+    const { data: users } = await supabase.from('users').select('id').limit(1);
+    const userId = users[0].id;
+
+    let { data: contact } = await supabase.from('contacts').select('id').eq('phone', from).eq('user_id', userId).single();
+    if (!contact) {
+      const { data: nc } = await supabase.from('contacts').insert([{ user_id: userId, phone: from, name: from, last_seen: new Date() }]).select().single();
+      contact = nc;
+    }
+
+    const aiResponse = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "system", content: 'Extract deal info from chat. Return JSON.' }, { role: "user", content: body }],
+      response_format: { type: "json_object" }
+    });
+    const aiResult = JSON.parse(aiResponse.choices[0].message.content);
+
+    let dealId = null;
+    if (aiResult.is_deal) {
+      const { data: deal } = await supabase.from('deals').insert([{
+        user_id: userId, contact_id: contact.id, title: aiResult.title, amount: aiResult.amount,
+        summary: aiResult.summary, customer_constraint: aiResult.customer_constraint,
+        ai_suggested_reply: aiResult.ai_reply, status: 'pending'
+      }]).select().single();
+      dealId = deal?.id;
+    }
+
+    await supabase.from('chat_messages').insert([{ user_id: userId, contact_id: contact.id, deal_id: dealId, body, direction: 'inbound' }]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Webhook error' });
+  }
 });
 
 // 3. Deals API
-app.get('/api/deals', async (req, res) => {
-  const { data, error } = await supabase
-    .from('deals')
-    .select('*, contacts(*)');
-  
-  if (error) return res.status(500).json(error);
-  res.json(data);
+app.get('/api/deals', authMiddleware, async (req, res) => {
+  const { data } = await supabase.from('deals').select('*, contacts(*)').eq('user_id', req.user.id);
+  res.json(data || []);
 });
 
-app.post('/api/deals', async (req, res) => {
-  const { data, error } = await supabase
-    .from('deals')
-    .insert([req.body])
-    .select();
-  
-  if (error) return res.status(500).json(error);
-  res.status(201).json(data[0]);
+// 4. Paystack
+app.post('/api/payments/initialize', authMiddleware, async (req, res) => {
+  const { dealId, amount } = req.body;
+  try {
+    const response = await axios.post('https://api.paystack.co/transaction/initialize', {
+      email: `${req.user.phone}@sabi.app`,
+      amount: amount * 100,
+      metadata: { deal_id: dealId }
+    }, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+    
+    const { authorization_url, reference } = response.data.data;
+    await supabase.from('payments').insert([{ deal_id: dealId, amount, verified_status: 'pending' }]);
+    res.json({ checkoutUrl: authorization_url, reference });
+  } catch (error) {
+    res.status(500).json({ error: 'Payment init error' });
+  }
 });
 
-// 4. Analytics Summary
-app.get('/api/analytics/summary', async (req, res) => {
-  // Mocking analytics for MVP
-  res.json({
-    totalDeals: 84,
-    closedDeals: 38,
-    revenue: 2450000,
-    ghosted: 12,
-    sabiRecovered: 340000
-  });
+app.get('/api/payments/verify/:reference', async (req, res) => {
+  const { reference } = req.params;
+  try {
+    const response = await axios.get(`https://api.paystack.co/transaction/verify/${reference}`, {
+      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
+    });
+    if (response.data.data.status === 'success') {
+      const { deal_id } = response.data.data.metadata;
+      await supabase.from('payments').update({ verified_status: 'verified' }).eq('deal_id', deal_id);
+      await supabase.from('deals').update({ status: 'paid' }).eq('id', deal_id);
+      res.json({ status: 'success' });
+    } else {
+      res.json({ status: 'failed' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Verify error' });
+  }
 });
 
-app.listen(port, () => {
-  console.log(`Sabi Server running on port ${port}`);
+// 5. Analytics
+app.get('/api/analytics/summary', authMiddleware, async (req, res) => {
+  const { data: deals } = await supabase.from('deals').select('amount, status').eq('user_id', req.user.id);
+  const summary = (deals || []).reduce((acc, d) => {
+    acc.totalDeals++;
+    if (d.status === 'paid') { acc.closedDeals++; acc.revenue += (d.amount || 0); }
+    if (d.status === 'ghosted') acc.ghosted++;
+    return acc;
+  }, { totalDeals: 0, closedDeals: 0, revenue: 0, ghosted: 0 });
+  res.json(summary);
 });
+
+app.listen(port, () => console.log(`Sabi Server on ${port}`));

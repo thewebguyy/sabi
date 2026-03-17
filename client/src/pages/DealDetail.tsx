@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, MoreHorizontal, MessageSquare, Clock, CheckCircle2, 
@@ -6,47 +6,72 @@ import {
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import confetti from 'canvas-confetti'
+import { getWhatsAppLink } from '../lib/utils'
+import { useDeal, Message } from '../hooks/useDeal'
+import { supabase } from '../lib/supabase'
 
 const DealDetail: React.FC = () => {
   const { id } = useParams()
+  const { deal, messages, loading, error } = useDeal(id)
   const [status, setStatus] = useState('pending')
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [loadingPayment, setLoadingPayment] = useState(false)
 
-  const deal = {
-    id: id,
-    customer: 'Chidinma O.',
-    phone: '+234 801 223 4455',
-    item: 'Ankara Fabric (6 yards) - Blue Pattern',
-    amount: 15000,
-    constraint: 'Needs it by Friday for an event',
-    summary: 'Customer is very interested but worried about the delivery time. She needs it for a wedding on Saturday.',
-    suggested_reply: 'Hi Chidinma! The blue Ankara is definitely available. If you pay now, I can send it via express delivery tomorrow morning so you get it by Friday! 🚚 Account: 1234567890 (Sabi Bank).',
-    intent: 'hot_lead'
-  }
+  useEffect(() => {
+    if (deal) setStatus(deal.status)
+  }, [deal])
 
   const handleMarkPaid = () => {
     setShowPaymentModal(true)
   }
 
-  const confirmPayment = () => {
+  const confirmPayment = async () => {
     setLoadingPayment(true)
-    setTimeout(() => {
-      setLoadingPayment(false)
-      setShowPaymentModal(false)
-      setStatus('paid')
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#25D366', '#0A3828', '#FF6B35']
-      })
-    }, 2000)
+    try {
+      // Real update in Supabase
+      const { error } = await supabase
+        .from('deals')
+        .update({ status: 'paid' })
+        .eq('id', id);
+      
+      if (error) throw error;
+
+      setTimeout(() => {
+        setLoadingPayment(false)
+        setShowPaymentModal(false)
+        setStatus('paid')
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#25D366', '#0A3828', '#FF6B35']
+        })
+      }, 1000)
+    } catch (err) {
+      console.error(err);
+      setLoadingPayment(false);
+    }
   }
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)
-    // Add toast logic here
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-vh-100 bg-background text-accent">
+        <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
+  if (error || !deal) {
+    return (
+      <div className="p-10 text-center space-y-4 bg-background min-h-screen">
+        <h2 className="text-xl font-bold">Deal not found</h2>
+        <Link to="/pipeline" className="text-accent underline">Go back to pipeline</Link>
+      </div>
+    )
   }
 
   return (
@@ -57,8 +82,8 @@ const DealDetail: React.FC = () => {
           <ArrowLeft size={20} />
         </Link>
         <div className="text-center">
-           <h2 className="text-lg font-bold leading-none">{deal.customer}</h2>
-           <p className="text-[10px] font-mono text-text-muted mt-1">{deal.phone}</p>
+           <h2 className="text-lg font-bold leading-none">{deal.contacts?.name || 'Unknown'}</h2>
+           <p className="text-[10px] font-mono text-text-muted mt-1">{deal.contacts?.phone}</p>
         </div>
         <button className="w-10 h-10 rounded-2xl bg-surface-2 flex items-center justify-center text-text-muted hover:text-text-primary">
           <MoreHorizontal size={20} />
@@ -80,17 +105,17 @@ const DealDetail: React.FC = () => {
         <div className="bg-surface p-6 rounded-[32px] border border-white/5 space-y-6 shadow-2xl">
            <div className="space-y-2">
               <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em]">Item / Deal Title</label>
-              <h3 className="text-xl font-syne font-extrabold">{deal.item}</h3>
+              <h3 className="text-xl font-syne font-extrabold">{deal.title}</h3>
            </div>
 
            <div className="flex justify-between items-center bg-surface-2/50 p-4 rounded-2xl border border-white/5">
               <div className="space-y-1">
                  <label className="text-[10px] font-bold text-text-muted uppercase opacity-50">Amount</label>
-                 <div className="text-2xl font-mono font-extrabold text-accent">₦{deal.amount.toLocaleString()}</div>
+                 <div className="text-2xl font-mono font-extrabold text-accent">₦{deal.amount?.toLocaleString()}</div>
               </div>
               <div className="text-right space-y-1">
                  <label className="text-[10px] font-bold text-text-muted uppercase opacity-50">Constraint</label>
-                 <div className="text-xs font-bold text-hot">{deal.constraint}</div>
+                 <div className="text-xs font-bold text-hot">{deal.customer_constraint || 'None'}</div>
               </div>
            </div>
         </div>
@@ -111,14 +136,14 @@ const DealDetail: React.FC = () => {
                  <div className="flex justify-between items-center">
                     <label className="text-[10px] font-bold text-text-muted uppercase">Suggested Reply</label>
                     <button 
-                       onClick={() => handleCopy(deal.suggested_reply)}
+                       onClick={() => handleCopy(deal.ai_suggested_reply)}
                        className="text-xs font-bold text-accent flex items-center gap-1.5 active:scale-95 transition-all"
                     >
                        <Copy size={12} /> Copy Reply
                     </button>
                  </div>
                  <div className="bg-primary/40 p-4 rounded-2xl border border-accent/10 text-xs leading-relaxed">
-                    {deal.suggested_reply}
+                    {deal.ai_suggested_reply}
                  </div>
               </div>
            </div>
@@ -130,28 +155,24 @@ const DealDetail: React.FC = () => {
            <span className="text-[10px] font-extrabold uppercase tracking-widest text-text-muted">Chat History</span>
         </div>
 
-        {/* Mock Chat bubbles */}
+        {/* Real Chat bubbles */}
         <div className="space-y-4 px-2">
-           <div className="flex flex-col items-start max-w-[85%]">
-              <div className="bg-surface-2 p-3 rounded-2xl rounded-tl-none text-sm text-text-primary border border-white/5">
-                 Hi, do you have the blue Ankara pattern in stock?
-              </div>
-              <span className="text-[8px] font-mono text-text-muted mt-1 px-1">10:45 AM</span>
-           </div>
-
-           <div className="flex flex-col items-end max-w-[85%] ml-auto">
-              <div className="bg-accent/80 p-3 rounded-2xl rounded-tr-none text-sm text-primary font-medium shadow-lg">
-                 Yes we do! 6 yards is ₦15,000.
-              </div>
-              <span className="text-[8px] font-mono text-text-muted mt-1 px-1 text-right">10:52 AM</span>
-           </div>
-
-           <div className="flex flex-col items-start max-w-[85%]">
-              <div className="bg-surface-2 p-3 rounded-2xl rounded-tl-none text-sm text-text-primary border border-white/5">
-                 I need it by Friday for a wedding. Can you deliver?
-              </div>
-              <span className="text-[8px] font-mono text-text-muted mt-1 px-1">11:10 AM</span>
-           </div>
+           {messages.length > 0 ? messages.map((m: Message) => (
+             <div key={m.id} className={`flex flex-col ${m.direction === 'outbound' ? 'items-end ml-auto' : 'items-start'} max-w-[85%]`}>
+                <div className={`p-3 rounded-2xl ${
+                  m.direction === 'outbound' 
+                    ? 'bg-accent/80 rounded-tr-none text-primary font-medium shadow-lg' 
+                    : 'bg-surface-2 rounded-tl-none text-text-primary border border-white/5'
+                } text-sm`}>
+                   {m.body}
+                </div>
+                <span className={`text-[8px] font-mono text-text-muted mt-1 px-1 ${m.direction === 'outbound' ? 'text-right' : ''}`}>
+                  {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+             </div>
+           )) : (
+             <p className="text-center text-xs text-text-muted py-10 opacity-50">No chat history found for this deal.</p>
+           )}
         </div>
 
         {/* Sticky Action Bar */}
@@ -171,10 +192,15 @@ const DealDetail: React.FC = () => {
                  <Clock size={24} />
                  <span className="text-[10px] font-bold mt-1 uppercase tracking-tight">Remind</span>
               </button>
-              <button className="flex-[3] bg-accent text-primary font-extrabold rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all shadow-[0_10px_30px_rgba(37,211,102,0.3)] h-16">
+              <a 
+                href={getWhatsAppLink(deal.contacts?.phone || '', deal.ai_suggested_reply)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-[3] bg-accent text-primary font-extrabold rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all shadow-[0_10px_30px_rgba(37,211,102,0.3)] h-16"
+              >
                  Message on WhatsApp
                  <Send size={24} />
-              </button>
+              </a>
            </div>
         </div>
       </div>

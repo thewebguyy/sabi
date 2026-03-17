@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
-import { Flame, Clock, Plus, GripVertical, ChevronRight } from 'lucide-react'
+import { Flame, Clock, Plus, GripVertical } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useDeals, Deal } from '../hooks/useDeals'
 
 interface PipelineItem {
   id: string;
@@ -59,47 +60,38 @@ const PipelineColumn = ({ title, count, color, bg, items }: { title: string, cou
 )
 
 const Pipeline: React.FC = () => {
-  const [activeStage, setActiveStage] = useState(0)
+  const { deals, loading } = useDeals()
 
-  const columns = [
-    { 
-       title: 'New Inquiry', 
-       count: 5, 
-       color: 'bg-yellow-400', 
-       bg: 'bg-yellow-400/5',
-       items: [
-         { id: '1', name: 'Chidinma', item: 'Ankara Fabric (6 yards)', amount: '₦15,000', time: '2h', urgent: true },
-         { id: '2', name: 'Emeka', item: 'Nike AF1 White Size 43', amount: '₦4,500', time: '4h' },
-       ]
-    },
-    { 
-       title: 'Conversation', 
-       count: 8, 
-       color: 'bg-blue-400', 
-       bg: 'bg-blue-400/5',
-       items: [
-         { id: '3', name: 'Tunde', item: 'G-Shock GA-100', amount: '₦32,000', time: '14h', urgent: true },
-       ]
-    },
-    { 
-       title: 'Waiting Payment', 
-       count: 3, 
-       color: 'bg-hot', 
-       bg: 'bg-hot/5',
-       items: [
-         { id: '4', name: 'Ayo', item: 'Laptop Sleeve - 15 inch', amount: '₦8,000', time: '1d' },
-       ]
-    },
-    { 
-       title: 'Paid', 
-       count: 12, 
-       color: 'bg-success', 
-       bg: 'bg-success/5',
-       items: [
-         { id: '5', name: 'Blessing', item: 'Gucci Belt (Black)', amount: '₦45,000', time: '2d' },
-       ]
-    },
+  const stages = [
+    { title: 'Inquiry', status: 'inquiry', color: 'bg-yellow-400', bg: 'bg-yellow-400/5' },
+    { title: 'Conversation', status: 'pending', color: 'bg-blue-400', bg: 'bg-blue-400/5' },
+    { title: 'Waiting Payment', status: 'waiting_payment', color: 'bg-hot', bg: 'bg-hot/5' },
+    { title: 'Paid', status: 'paid', color: 'bg-accent', bg: 'bg-accent/5' },
   ]
+
+  const columns = stages.map(stage => {
+    const stageItems = deals.filter((d: Deal) => d.status === stage.status)
+    return {
+      ...stage,
+      count: stageItems.length,
+      items: stageItems.map((d: Deal) => ({
+        id: d.id,
+        name: d.contacts?.name || 'Unknown',
+        item: d.title,
+        amount: `₦${d.amount?.toLocaleString()}`,
+        time: new Date(d.created_at).toLocaleDateString(),
+        urgent: d.status === 'pending'
+      }))
+    }
+  })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="py-2 -mx-4 px-4 h-full relative overflow-hidden">
@@ -107,13 +99,6 @@ const Pipeline: React.FC = () => {
       <div className="flex gap-4 overflow-x-auto no-scrollbar pb-10">
         {columns.map((col, i) => (
            <PipelineColumn key={i} {...col} />
-        ))}
-      </div>
-
-      {/* Column Snap Indicator (Mobile Only) */}
-      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 flex gap-1 z-30">
-        {columns.map((_, i) => (
-          <div key={i} className={`w-3 h-1 rounded-full transition-all ${i === Math.floor(activeStage) ? 'w-6 bg-accent' : 'bg-surface-2'}`}></div>
         ))}
       </div>
     </div>
