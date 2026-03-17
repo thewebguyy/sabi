@@ -17,9 +17,11 @@ interface SabiState {
   setUser: (user: User | null) => void;
   initialize: () => Promise<void>;
   signOut: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, businessName: string) => Promise<void>;
 }
 
-export const useStore = create<SabiState>((set) => ({
+export const useStore = create<SabiState>((set, get) => ({
   user: null,
   loading: true,
   initialized: false,
@@ -44,6 +46,52 @@ export const useStore = create<SabiState>((set) => ({
       console.error('Initialization error:', error);
       set({ initialized: true, loading: false });
     }
+  },
+
+  signIn: async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    
+    const { data: profile } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+    
+    set({ user: profile });
+  },
+
+  signUp: async (email, password, businessName) => {
+    const { data, error } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: { business_name: businessName }
+      }
+    });
+
+    if (error) throw error;
+    if (!data.user) throw new Error('Signup failed');
+
+    // Create profile in our 'users' table
+    const { error: profileError } = await supabase
+      .from('users')
+      .insert([{
+        id: data.user.id,
+        phone: data.user.email?.split('@')[0], // Extract phone from fake email
+        business_name: businessName,
+        plan: 'free'
+      }]);
+
+    if (profileError) throw profileError;
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    set({ user: profile });
   },
 
   signOut: async () => {
