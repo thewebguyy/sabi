@@ -61,6 +61,9 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose, onSuccess 
     try {
       // 1. Resolve or Create Contact
       let contactId: string
+      const isPhone = /^\+?[0-9]{10,15}$/.test(contactInfo.replace(/\s/g, ''))
+      const phoneValue = isPhone ? contactInfo.replace(/\s/g, '') : `guest_${Date.now()}`
+
       const { data: existingContact } = await supabase
         .from('contacts')
         .select('id')
@@ -71,13 +74,12 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose, onSuccess 
       if (existingContact) {
         contactId = existingContact.id
       } else {
-        const isPhone = /^\+?[0-9]{10,15}$/.test(contactInfo.replace(/\s/g, ''))
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert([{
             user_id: user.id,
-            name: isPhone ? contactInfo : contactInfo,
-            phone: isPhone ? contactInfo : null,
+            name: contactInfo,
+            phone: phoneValue,
             last_seen: new Date()
           }])
           .select()
@@ -101,6 +103,9 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose, onSuccess 
         }])
 
       if (dealError) throw dealError
+
+      // Refresh store deals
+      await useStore.getState().fetchDeals()
 
       setShowSuccess(true)
       setTimeout(() => {

@@ -26,28 +26,29 @@ const PipelineColumn = ({ title, count, color, bg, items }: { title: string, cou
     <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar">
        {items.length > 0 ? (
          items.map((item, i) => (
-           <motion.div 
-             key={item.id}
-             initial={{ opacity: 0, x: 10 }}
-             animate={{ opacity: 1, x: 0 }}
-             className="bg-surface p-4 rounded-2xl border border-white/5 relative active:border-accent group cursor-pointer"
-           >
-             <div className="absolute left-1 top-1/2 -translate-y-1/2 opacity-0 group-active:opacity-40"><GripVertical size={16} /></div>
-             <div className="flex justify-between items-start mb-2">
-                <h4 className="font-bold text-sm truncate pr-2">{item.name}</h4>
-                <div className="text-[10px] font-mono text-text-muted font-medium">{item.time}</div>
-             </div>
-             <p className="text-[11px] text-text-muted mb-3">{item.item}</p>
-             <div className="flex items-center justify-between">
-                <div className="text-xs font-mono font-bold">{item.amount}</div>
-                {item.urgent && <Flame size={14} className="text-hot animate-pulse" />}
-             </div>
-             {item.urgent && (
-                <div className="mt-2 text-[8px] font-bold text-hot uppercase tracking-widest flex items-center gap-1">
-                  <Clock size={8} /> Needs Action
-                </div>
-             )}
-           </motion.div>
+           <Link key={item.id} to={`/deals/${item.id}`} className="block">
+            <motion.div 
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-surface p-4 rounded-2xl border border-white/5 relative active:border-accent group cursor-pointer"
+            >
+              <div className="absolute left-1 top-1/2 -translate-y-1/2 opacity-0 group-active:opacity-40"><GripVertical size={16} /></div>
+              <div className="flex justify-between items-start mb-2">
+                 <h4 className="font-bold text-sm truncate pr-2">{item.name}</h4>
+                 <div className="text-[10px] font-mono text-text-muted font-medium">{item.time}</div>
+              </div>
+              <p className="text-[11px] text-text-muted mb-3">{item.item}</p>
+              <div className="flex items-center justify-between">
+                 <div className="text-xs font-mono font-bold">{item.amount}</div>
+                 {item.urgent && <Flame size={14} className="text-hot animate-pulse" />}
+              </div>
+              {item.urgent && (
+                 <div className="mt-2 text-[8px] font-bold text-hot uppercase tracking-widest flex items-center gap-1">
+                   <Clock size={8} /> Needs Action
+                 </div>
+              )}
+            </motion.div>
+           </Link>
          ))
        ) : (
          <div className="h-24 border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center text-[10px] font-bold text-text-muted uppercase tracking-widest gap-2">

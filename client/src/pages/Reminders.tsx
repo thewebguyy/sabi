@@ -22,7 +22,7 @@ const ReminderCard = ({ r, onDelete, onSend }: { r: Reminder, onDelete: (id: str
            </div>
         </div>
         <div className="bg-white/5 border border-white/5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold text-text-muted">
-           {new Date(r.remind_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+           {new Date(r.trigger_time).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
         </div>
      </div>
 
@@ -60,7 +60,7 @@ const Reminders: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-vh-100 bg-background text-accent py-20">
+      <div className="flex items-center justify-center min-h-screen bg-background text-accent py-20">
         <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
       </div>
     )

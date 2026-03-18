@@ -10,18 +10,38 @@ import { sendOTP, sendSMS } from './utils/notifications.js';
 
 dotenv.config();
 
+// Environment Validation
+const requiredEnv = ['VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENAI_API_KEY'];
+const validateEnv = () => {
+  const missing = requiredEnv.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    console.error(`CRITICAL: Missing environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+};
+validateEnv();
+
 const app = express();
 const port = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:5173'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 app.use(morgan('dev'));
 
 // Supabase & OpenAI Setup
 const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 const openai = new OpenAI({
@@ -50,8 +70,8 @@ const aiRateLimiter = rateLimit({
 
 // --- ROUTES ---
 
-// Simple OTP Store (In-memory for demo, should be Redis in production)
-const otpStore = new Map();
+// Health Check
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', uptime: process.uptime() }));
 
 // 0. Auth
 app.post('/api/auth/send-otp', async (req, res) => {
@@ -59,8 +79,12 @@ app.post('/api/auth/send-otp', async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'Phone required' });
   try {
     const otp = await sendOTP(phone);
-    // For demo, we still allow 123456 as a universal bypass, but we store the real one too.
-    otpStore.set(phone, { otp: otp.toString(), expires: Date.now() + 600000 });
+    
+    // Store in DB for persistence across instances
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
+    await supabase.from('otp_codes').delete().eq('phone', phone); // Clear old ones
+    await supabase.from('otp_codes').insert([{ phone, code: otp.toString(), expires_at: expiresAt }]);
+    
     res.json({ success: true, message: 'OTP sent' });
   } catch (error) {
     console.error('OTP error:', error);
@@ -70,13 +94,24 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
 app.post('/api/auth/verify-otp', async (req, res) => {
   const { phone, otp } = req.body;
-  const stored = otpStore.get(phone);
+  
+  try {
+    const { data: stored, error } = await supabase
+      .from('otp_codes')
+      .select('*')
+      .eq('phone', phone)
+      .eq('code', otp)
+      .gt('expires_at', new Date().toISOString())
+      .single();
 
-  if (otp === '123456' || (stored && stored.otp === otp && stored.expires > Date.now())) {
-    otpStore.delete(phone);
-    res.json({ success: true });
-  } else {
-    res.status(400).json({ error: 'Invalid or expired OTP' });
+    if (stored) {
+      await supabase.from('otp_codes').delete().eq('phone', phone);
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Verification failed' });
   }
 });
 
@@ -89,7 +124,7 @@ app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res)
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: 'Analyze chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply, intent }' },
+        { role: "system", content: 'Analyze chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply, intent, phone_number }' },
         { role: "user", content: chatText }
       ],
       response_format: { type: "json_object" }
@@ -101,11 +136,20 @@ app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res)
   }
 });
 
-// 2. WhatsApp Webhook (Fixed User Resolution)
+// 2. WhatsApp Webhook (Fixed User Resolution & Security)
 app.post('/api/webhook/whatsapp', async (req, res) => {
   const { body, from, to } = req.body;
-  
-  // SECURE: Verify HMAC signature should go here in production
+  const signature = req.headers['x-hub-signature-256'];
+  const secret = process.env.WEBHOOK_SECRET;
+
+  if (secret && signature) {
+    const crypto = await import('crypto');
+    const hmac = crypto.createHmac('sha256', secret);
+    const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
+    if (signature !== digest) {
+        return res.status(401).json({ error: 'Invalid signature' });
+    }
+  }
   
   if (!body || !from || !to) return res.status(400).json({ error: 'Missing fields' });
 
@@ -126,7 +170,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
     const aiResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "system", content: 'Extract deal info from chat. Return JSON.' }, { role: "user", content: body }],
+      messages: [{ role: "system", content: 'Extract deal info from chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply }' }, { role: "user", content: body }],
       response_format: { type: "json_object" }
     });
     const aiResult = JSON.parse(aiResponse.choices[0].message.content);
@@ -134,7 +178,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     let dealId = null;
     if (aiResult.is_deal) {
       const { data: deal } = await supabase.from('deals').insert([{
-        user_id: userId, contact_id: contact.id, title: aiResult.title, amount: aiResult.amount,
+        user_id: userId, contact_id: contact.id, title: aiResult.title || 'Inquiry', amount: aiResult.amount || 0,
         summary: aiResult.summary, customer_constraint: aiResult.customer_constraint,
         ai_suggested_reply: aiResult.ai_reply, status: 'pending'
       }]).select().single();
@@ -152,7 +196,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 // 3. Deals API
 app.get('/api/deals', authMiddleware, async (req, res) => {
   try {
-      const { data, error } = await supabase.from('deals').select('*, contacts(*)').eq('user_id', req.user.id);
+      const { data, error } = await supabase.from('deals').select('*, contacts(*)').eq('user_id', req.user.id).order('created_at', { ascending: false });
       if (error) throw error;
       res.json(data || []);
   } catch (error) {
@@ -168,7 +212,7 @@ app.post('/api/payments/initialize', authMiddleware, async (req, res) => {
   try {
     const response = await axios.post('https://api.paystack.co/transaction/initialize', {
       email: `${req.user.phone}@sabi.app`,
-      amount: amount * 100, // kobo
+      amount: Math.round(amount * 100), // kobo
       metadata: { deal_id: dealId, user_id: req.user.id }
     }, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
     
@@ -210,8 +254,7 @@ app.get('/api/payments/verify/:reference', authMiddleware, async (req, res) => {
 // 5. Analytics
 app.get('/api/analytics/summary', authMiddleware, async (req, res) => {
   try {
-      // Use Supabase aggregate queries or simple select for MVP
-      const { data: deals, error } = await supabase.from('deals').select('amount, status').eq('user_id', req.user.id);
+      const { data: deals, error } = await supabase.from('deals').select('amount, status, created_at').eq('user_id', req.user.id);
       if (error) throw error;
 
       const summary = (deals || []).reduce((acc, d) => {
@@ -231,4 +274,16 @@ app.get('/api/analytics/summary', authMiddleware, async (req, res) => {
   }
 });
 
-app.listen(port, () => console.log(`Sabi Server on ${port}`));
+const server = app.listen(port, () => console.log(`Sabi Server on ${port}`));
+
+// SIGTERM handler
+const shutdown = () => {
+  console.log('Shutting down server...');
+  server.close(() => {
+    console.log('Server closed.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

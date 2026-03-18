@@ -103,8 +103,8 @@ const Contacts: React.FC = () => {
 
   if (contactsLoading || dealsLoading) {
     return (
-      <div className="flex items-center justify-center min-vh-100">
-        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex items-center justify-center min-h-screen bg-background text-accent">
+        <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
       </div>
     )
   }
@@ -171,7 +171,9 @@ const Contacts: React.FC = () => {
             </div>
             <div className="w-[1px] h-8 bg-white/5"></div>
             <div className="space-y-1">
-               <div className="text-xl font-mono font-extrabold text-accent">92%</div>
+               <div className="text-xl font-mono font-extrabold text-accent">
+                 {deals.length > 0 ? Math.round((deals.filter((d: any) => d.status !== 'ghosted').length / deals.length) * 100) : 0}%
+               </div>
                <div className="text-[8px] font-bold text-text-muted uppercase tracking-widest">Lead Qual</div>
             </div>
          </div>

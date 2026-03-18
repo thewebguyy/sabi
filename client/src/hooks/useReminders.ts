@@ -6,8 +6,9 @@ export interface Reminder {
   id: string;
   user_id: string;
   deal_id: string | null;
-  remind_at: string;
+  trigger_time: string;
   message: string;
+  is_sent: boolean;
   status: 'pending' | 'sent' | 'cancelled';
   deals?: { title: string; contacts: { name: string } };
 }
@@ -25,10 +26,16 @@ export const useReminders = () => {
         .from('reminders')
         .select('*, deals(title, contacts(name))')
         .eq('user_id', user.id)
-        .order('remind_at', { ascending: true })
+        .order('trigger_time', { ascending: true })
 
       if (error) throw error
-      setReminders(data || [])
+      
+      const mapped = (data || []).map((r: any) => ({
+        ...r,
+        status: r.is_sent ? 'sent' : 'pending'
+      }));
+      
+      setReminders(mapped)
     } catch (err) {
       console.error('Fetch reminders error:', err)
     } finally {

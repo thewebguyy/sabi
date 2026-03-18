@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Flame, Clock, Eye, CheckCircle2, Plus, MessageCircle, MoreHorizontal } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import AddDealModal from '../components/AddDealModal'
+import { useStore } from '../store/useStore'
 import { getWhatsAppLink } from '../lib/utils'
-import { useDeals, Deal } from '../hooks/useDeals'
 
 const MetricCard = ({ icon, label, count, color, bg }: { icon: React.ReactNode, label: string, count: string, color: string, bg: string }) => (
   <div className={`flex-shrink-0 w-40 p-4 rounded-3xl border border-white/5 ${bg} space-y-3`}>
@@ -67,25 +67,31 @@ const DealCard = ({ name, summary, time, status, amount, color, phone }: any) =>
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('follow-up')
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const { deals, loading } = useDeals()
+  const [filter, setFilter] = useState('All')
+  const { deals, loading } = useStore() // Use store deals for realtime
 
   const formatMetricRevenue = (amount: number) => {
     if (amount >= 1000000) return `₦${(amount / 1000000).toFixed(1)}M`;
-    if (amount >= 1000) return `₦${(amount / 1000).toFixed(0)}K`;
+    if (amount >= 1000) return `₦${Math.round(amount / 1000)}K`;
     return `₦${amount}`;
   };
 
-  const revenue = deals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (Number(d.amount) || 0), 0);
+  const revenue = deals.filter((d: any) => d.status === 'paid').reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
 
   const metrics = [
-    { icon: <Flame size={16} />, label: 'Hot Leads', count: deals.filter((d: Deal) => d.status === 'pending').length.toString(), color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
-    { icon: <Clock size={16} />, label: 'Waiting', count: deals.filter((d: Deal) => d.status === 'inquiry').length.toString(), color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
-    { icon: <Eye size={16} />, label: 'Pending', count: deals.filter((d: Deal) => d.status === 'waiting_payment').length.toString(), color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
+    { icon: <Flame size={16} />, label: 'Hot Leads', count: deals.filter((d: any) => d.status === 'pending').length.toString(), color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
+    { icon: <Clock size={16} />, label: 'Waiting', count: deals.filter((d: any) => d.status === 'inquiry').length.toString(), color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
+    { icon: <Eye size={16} />, label: 'Pending', count: deals.filter((d: any) => d.status === 'waiting_payment').length.toString(), color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
     { icon: <CheckCircle2 size={16} />, label: 'Revenue', count: formatMetricRevenue(revenue), color: 'text-accent', bg: 'bg-accent/5 border-accent/10' },
   ]
 
   // Follow up = inquiry or pending
-  const followUpDeals = deals.filter((d: Deal) => d.status === 'inquiry' || d.status === 'pending')
+  const followUpDeals = deals.filter((d: any) => d.status === 'inquiry' || d.status === 'pending')
+
+  // Filtered All Deals
+  const filteredDeals = filter === 'All' 
+    ? deals 
+    : deals.filter((d: any) => d.status.toLowerCase() === filter.toLowerCase());
 
   if (loading) {
     return (
@@ -137,7 +143,7 @@ const Dashboard: React.FC = () => {
               className="space-y-4"
             >
               {followUpDeals.length > 0 ? (
-                followUpDeals.map((d: Deal) => (
+                followUpDeals.map((d: any) => (
                   <Link key={d.id} to={`/deals/${d.id}`}>
                     <DealCard 
                       name={d.contacts?.name || 'Unknown'} 
@@ -170,12 +176,20 @@ const Dashboard: React.FC = () => {
             >
               <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                  {['All', 'Inquiry', 'Pending', 'Paid', 'Ghosted'].map(chip => (
-                   <button key={chip} className="px-4 py-1.5 bg-surface-2 border border-white/5 rounded-full text-xs font-bold text-text-muted whitespace-nowrap hover:bg-surface active:border-accent transition-all">
+                   <button 
+                    key={chip} 
+                    onClick={() => setFilter(chip)}
+                    className={`px-4 py-1.5 border rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                      filter === chip 
+                        ? 'bg-accent/10 border-accent text-accent' 
+                        : 'bg-surface-2 border-white/5 text-text-muted hover:bg-surface'
+                    }`}
+                   >
                      {chip}
                    </button>
                  ))}
               </div>
-              {deals.map((d: Deal) => (
+              {filteredDeals.length > 0 ? filteredDeals.map((d: any) => (
                  <Link key={d.id} to={`/deals/${d.id}`}>
                    <DealCard 
                      name={d.contacts?.name || 'Unknown'} 
@@ -187,7 +201,9 @@ const Dashboard: React.FC = () => {
                      color="text-accent" 
                    />
                  </Link>
-              ))}
+              )) : (
+                <p className="text-center text-text-muted py-10 text-sm">No {filter !== 'All' ? filter.toLowerCase() : ''} deals found.</p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

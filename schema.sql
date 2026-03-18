@@ -8,8 +8,19 @@ CREATE TABLE IF NOT EXISTS public.users (
     currency TEXT DEFAULT 'NGN',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     whatsapp_connected BOOLEAN DEFAULT false,
-    plan TEXT DEFAULT 'free' -- 'free' | 'grind' | 'sabi_pro'
+    plan TEXT DEFAULT 'free', -- 'free' | 'grind' | 'sabi_pro'
+    has_seeded BOOLEAN DEFAULT false
 );
+
+-- 1.1 OTP Codes Table (for persistent across instances)
+CREATE TABLE IF NOT EXISTS public.otp_codes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    phone TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+CREATE INDEX IF NOT EXISTS idx_otp_phone ON public.otp_codes(phone);
 
 -- 2. Contacts Table
 CREATE TABLE IF NOT EXISTS public.contacts (

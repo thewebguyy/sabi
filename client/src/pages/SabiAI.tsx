@@ -40,27 +40,45 @@ const SabiAI: React.FC = () => {
   const handleSaveAsDeal = async () => {
     if (!result || !user) return
     setSaving(true)
+    setError(null)
     try {
-      // 1. Create/Find generic contact for this AI session
-      const { data: contact } = await supabase
-        .from('contacts')
-        .insert([{
-          user_id: user.id,
-          name: result.title?.split(' ')[0] || 'AI Prospect',
-          phone: null,
-          last_seen: new Date()
-        }])
-        .select()
-        .single()
+      // 1. Resolve Contact
+      // Extract phone number if it has one
+      const extractedPhone = result.phone_number || result.phone || `ai_${Date.now()}`
+      const contactName = result.name || result.title?.split(' ')[0] || 'AI Prospect'
 
-      if (!contact) throw new Error('Failed to create contact')
+      let contactId: string
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('phone', extractedPhone)
+        .eq('user_id', user.id)
+        .single()
+      
+      if (existingContact) {
+        contactId = existingContact.id
+      } else {
+        const { data: contact, error: contactError } = await supabase
+          .from('contacts')
+          .insert([{
+            user_id: user.id,
+            name: contactName,
+            phone: extractedPhone,
+            last_seen: new Date()
+          }])
+          .select()
+          .single()
+        
+        if (contactError) throw contactError
+        contactId = contact.id
+      }
 
       // 2. Create Deal
       const { error: dealError } = await supabase
         .from('deals')
         .insert([{
           user_id: user.id,
-          contact_id: contact.id,
+          contact_id: contactId,
           title: result.title || 'AI Extracted Deal',
           amount: result.amount || 0,
           status: 'pending',
@@ -70,6 +88,10 @@ const SabiAI: React.FC = () => {
         }])
 
       if (dealError) throw dealError
+
+      // 3. Update store
+      await useStore.getState().fetchDeals()
+
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {

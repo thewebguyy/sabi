@@ -131,7 +131,7 @@ const Settings: React.FC = () => {
                     <Star size={10} fill="currentColor" /> POPULAR
                  </div>
               </div>
-              <p className="text-sm text-text-muted mb-6">Your next billing is ₦4,900 on April 12, 2024.</p>
+              <p className="text-sm text-text-muted mb-6">Your next billing is ₦4,900 on {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</p>
               <div className="flex gap-4">
                  <Link to="/pricing" className="flex-1 bg-accent/10 border border-accent/20 text-accent font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
                     <Zap size={16} /> Upgrade

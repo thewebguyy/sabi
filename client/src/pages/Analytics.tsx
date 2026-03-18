@@ -51,11 +51,29 @@ const Analytics: React.FC = () => {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5)
 
-  // Revenue data (mocked weekly for now until we have more dates)
-  const revenueData = [
-    { week: 'W1', amount: 0 },
-    { week: 'W2', amount: summary?.revenue || 0 },
-  ]
+  // Revenue data (Grouped by week)
+  const getWeek = (date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  };
+
+  const weeklyRevenueMap: Record<string, number> = {};
+  deals.filter((d: Deal) => d.status === 'paid').forEach((d: Deal) => {
+    const week = `W${getWeek(new Date(d.created_at))}`;
+    weeklyRevenueMap[week] = (weeklyRevenueMap[week] || 0) + (d.amount || 0);
+  });
+
+  const revenueData = Object.entries(weeklyRevenueMap).map(([week, amount]) => ({ week, amount })).sort((a, b) => a.week.localeCompare(b.week));
+  
+  // Ensure we have at least some points for the chart
+  if (revenueData.length === 1) {
+    revenueData.unshift({ week: 'Pre', amount: 0 });
+  } else if (revenueData.length === 0) {
+    revenueData.push({ week: 'None', amount: 0 });
+  }
 
   if (summaryLoading || dealsLoading) {
     return (

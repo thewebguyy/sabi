@@ -5,6 +5,8 @@ export interface User {
   id: string;
   phone: string;
   business_name: string;
+  currency: string;
+  has_seeded: boolean;
   created_at: string;
 }
 
@@ -12,9 +14,11 @@ interface SabiState {
   user: User | null;
   loading: boolean;
   initialized: boolean;
+  deals: any[];
   setUser: (user: User | null) => void;
   initialize: () => Promise<void>;
   seedDemoData: (userId: string) => Promise<void>;
+  fetchDeals: () => Promise<void>;
   signOut: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, businessName: string) => Promise<void>;
@@ -24,6 +28,7 @@ export const useStore = create<SabiState>((set, get) => ({
   user: null,
   loading: true,
   initialized: false,
+  deals: [],
 
   setUser: (user) => set({ user }),
 
@@ -37,20 +42,59 @@ export const useStore = create<SabiState>((set, get) => ({
           .eq('id', session.user.id)
           .single();
         
-        set({ user: userProfile, initialized: true, loading: false });
+        if (userProfile) {
+          set({ user: userProfile });
+          
+          // Seed check: 
+          if (!userProfile.has_seeded) {
+            await get().seedDemoData(session.user.id);
+            // Re-fetch profile to get updated has_seeded
+            const { data: updatedProfile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            set({ user: updatedProfile });
+          }
+          
+          // Fetch initial deals
+          await get().fetchDeals();
 
-        // Seed check: If no deals, add demo ones
-        const { count } = await supabase.from('deals').select('*', { count: 'exact', head: true }).eq('user_id', session.user.id);
-        if (count === 0) {
-          await get().seedDemoData(session.user.id);
+          // Set up realtime sub
+          supabase
+            .channel(`deals-user-${session.user.id}`)
+            .on('postgres_changes', { 
+               event: '*', 
+               schema: 'public', 
+               table: 'deals', 
+               filter: `user_id=eq.${session.user.id}` 
+            }, () => {
+              get().fetchDeals();
+            })
+            .subscribe();
         }
+
+        set({ initialized: true, loading: false });
       } else {
-        set({ user: null, initialized: true, loading: false });
+        set({ user: null, initialized: true, loading: false, deals: [] });
       }
     } catch (error) {
       console.error('Initialization error:', error);
       set({ initialized: true, loading: false });
     }
+  },
+
+  fetchDeals: async () => {
+    const { user } = get();
+    if (!user) return;
+    
+    const { data: deals } = await supabase
+      .from('deals')
+      .select('*, contacts(*)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    set({ deals: deals || [] });
   },
 
   seedDemoData: async (userId: string) => {
@@ -78,6 +122,9 @@ export const useStore = create<SabiState>((set, get) => ({
         { user_id: userId, contact_id: contact.id, title: 'Designer Perfume', amount: 35000, status: 'waiting_payment', summary: 'Awaiting transfer' },
         { user_id: userId, contact_id: contact.id, title: 'Sample Sneakers 44', amount: 18000, status: 'pending', summary: 'Size 44 check' }
       ]);
+
+      // 3. Mark as seeded
+      await supabase.from('users').update({ has_seeded: true }).eq('id', userId);
     } catch (err) {
       console.error('Seed error:', err);
     }

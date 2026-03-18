@@ -59,7 +59,7 @@ const DealDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-vh-100 bg-background text-accent">
+      <div className="flex items-center justify-center min-h-screen bg-background text-accent">
         <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
       </div>
     )
@@ -234,13 +234,13 @@ const DealDetail: React.FC = () => {
                       <ShieldCheck size={32} />
                    </div>
                    <h3 className="text-2xl font-syne font-extrabold mb-2">Verify Payment</h3>
-                   <p className="text-sm text-text-muted px-6">Upload Chidinma's payment proof to mark this deal as paid.</p>
+                   <p className="text-sm text-text-muted px-6">Upload {deal.contacts?.name}'s payment proof to mark this deal as paid.</p>
                 </div>
 
                 <div className="space-y-6 mb-10">
                    <div className="bg-surface-2 border border-white/5 p-4 rounded-2xl flex justify-between items-center font-mono">
                       <span className="text-xs text-text-muted uppercase">Amount</span>
-                      <span className="text-xl font-extrabold text-accent">₦15,000</span>
+                      <span className="text-xl font-extrabold text-accent">₦{deal.amount?.toLocaleString()}</span>
                    </div>
                    
                    <div className="aspect-video bg-surface-2 rounded-3xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-2 group hover:border-accent/40 cursor-pointer transition-all">

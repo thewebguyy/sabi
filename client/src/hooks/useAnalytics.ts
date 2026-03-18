@@ -18,11 +18,11 @@ export const useAnalytics = () => {
 
   const fetchAnalytics = async () => {
     if (!user) return;
-    
+
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/analytics/summary`, {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
@@ -30,7 +30,7 @@ export const useAnalytics = () => {
       });
 
       if (!response.ok) throw new Error('Failed to fetch analytics');
-      
+
       const data = await response.json();
       setSummary(data);
     } catch (err: any) {

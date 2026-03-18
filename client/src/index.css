@@ -41,10 +41,24 @@ h1, h2, h3, h4, .font-syne {
 
 /* Glassmorphism utility */
 .glass {
-  @apply bg-surface bg-opacity-70 backdrop-blur-lg border border-white border-opacity-10;
+  @apply bg-surface bg-opacity-70 border border-white border-opacity-10;
+  /* Reduced blur for performance on low-end devices */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 /* Mobile Nav fix */
 .safe-p-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Utility to hide scrollbars */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
 }

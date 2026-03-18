@@ -1,6 +1,7 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Flame, DollarSign, Clock, PartyPopper, CheckCircle2 } from 'lucide-react'
+import { useStore } from '../store/useStore'
 
 interface NotificationsPanelProps {
   isOpen: boolean;
@@ -25,35 +26,41 @@ const NotificationItem = ({ icon, title, message, time, color }: any) => (
 )
 
 const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ isOpen, onClose }) => {
-  const notifications = [
-    { 
-       icon: <Flame size={18} />, 
-       title: "Chidinma hasn't replied to your price", 
-       message: "It's been 18 hours. Follow up before the deal goes cold! 🔥", 
-       time: "10m ago", 
-       color: "text-hot" 
-    },
-    { 
-       icon: <DollarSign size={18} />, 
-       title: "Kunle just sent payment proof", 
-       message: "₦32,000 pending verification for G-Shock GA-100. 💰", 
-       time: "1h ago", 
-       color: "text-accent" 
-    },
-    { 
-       icon: <Clock size={18} />, 
-       title: "Reminder: Follow up with Blessing", 
-       message: "She needs the delivery details for the wedding. ⏰", 
-       time: "3h ago", 
-       color: "text-gold" 
-    },
+  const { deals } = useStore()
+  
+  // Real notifications
+  const derivedNotifications = [
+    ...deals
+      .filter((d: any) => d.status === 'pending')
+      .slice(0, 2)
+      .map((d: any) => ({
+        icon: <Flame size={18} />,
+        title: `${d.contacts?.name || 'Customer'} hasn't replied to your price`,
+        message: `It's been a while. Follow up before the deal for "${d.title}" goes cold! 🔥`,
+        time: "Now",
+        color: "text-hot"
+      })),
+    ...deals
+      .filter((d: any) => d.status === 'waiting_payment')
+      .slice(0, 2)
+      .map((d: any) => ({
+        icon: <DollarSign size={18} />,
+        title: `Pending payment for ${d.title}`,
+        message: `Awaiting payment verification for ₦${d.amount?.toLocaleString()}. 💰`,
+        time: "Active",
+        color: "text-accent"
+      }))
+  ]
+
+  // Fallback/System notifications
+  const notifications = derivedNotifications.length > 0 ? derivedNotifications : [
     { 
        icon: <PartyPopper size={18} />, 
-       title: "You closed 3 deals this week!", 
-       message: "That's your best week this month. Keep high hustle energy! 🎉", 
+       title: "Welcome to Sabi! 🎉", 
+       message: "We're watching your chats to find deals for you. Go hustle! 💚", 
        time: "1d ago", 
        color: "text-success" 
-    },
+    }
   ]
 
   return (
@@ -77,7 +84,7 @@ const NotificationsPanel: React.FC<NotificationsPanelProps> = ({ isOpen, onClose
             <div className="p-6 border-b border-white/5 flex justify-between items-center bg-surface">
                <div className="flex items-center gap-3">
                   <h3 className="text-xl font-syne font-extrabold">Notifications</h3>
-                  <span className="bg-hot text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">4</span>
+                  <span className="bg-hot text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">{notifications.length}</span>
                </div>
                <button 
                  onClick={onClose}
