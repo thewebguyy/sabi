@@ -17,6 +17,9 @@ import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 import Pricing from './pages/Pricing'
 
+import { ToastProvider } from './context/ToastContext'
+import ErrorBoundary from './components/ErrorBoundary'
+
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { user, loading, initialized } = useStore();
 
@@ -34,25 +37,29 @@ function App() {
   }, [initialize]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/auth" element={<Auth />} />
-        
-        <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-          <Route path="/connect" element={<Connect />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/pipeline" element={<Pipeline />} />
-          <Route path="/deals/:id" element={<DealDetail />} />
-          <Route path="/ai" element={<SabiAI />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/reminders" element={<Reminders />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/pricing" element={<Pricing />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/auth" element={<Auth />} />
+            
+            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+              <Route path="/connect" element={<Connect />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/pipeline" element={<Pipeline />} />
+              <Route path="/deals/:id" element={<DealDetail />} />
+              <Route path="/ai" element={<SabiAI />} />
+              <Route path="/contacts" element={<Contacts />} />
+              <Route path="/reminders" element={<Reminders />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/pricing" element={<Pricing />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
+    </ErrorBoundary>
   )
 }
 

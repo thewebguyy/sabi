@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { QrCode, Smartphone, CheckCircle2, ChevronRight, MessageSquare, Flame } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
+import { useStore } from '../store/useStore'
 
 const Connect: React.FC = () => {
   const [step, setStep] = useState(1)
   const [progress, setProgress] = useState(0)
   const navigate = useNavigate()
+  const { user } = useStore()
 
   useEffect(() => {
     if (step === 2) {
@@ -69,7 +71,7 @@ const Connect: React.FC = () => {
                <div className="p-8 bg-surface rounded-[40px] border-4 border-accent shadow-[0_0_50px_rgba(37,211,102,0.15)] relative">
                   <div className="flex items-center justify-center bg-white p-4 rounded-3xl">
                     <QRCodeSVG 
-                      value="https://sabi.app/mock-whatsapp-connect" 
+                      value={`https://sabi-crm.vercel.app/link?v=${user?.id || 'demo'}`} 
                       size={200}
                       fgColor="#0D0D0D"
                     />

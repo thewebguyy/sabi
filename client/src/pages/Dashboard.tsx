@@ -69,11 +69,19 @@ const Dashboard: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const { deals, loading } = useDeals()
 
+  const formatMetricRevenue = (amount: number) => {
+    if (amount >= 1000000) return `₦${(amount / 1000000).toFixed(1)}M`;
+    if (amount >= 1000) return `₦${(amount / 1000).toFixed(0)}K`;
+    return `₦${amount}`;
+  };
+
+  const revenue = deals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (Number(d.amount) || 0), 0);
+
   const metrics = [
     { icon: <Flame size={16} />, label: 'Hot Leads', count: deals.filter((d: Deal) => d.status === 'pending').length.toString(), color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
     { icon: <Clock size={16} />, label: 'Waiting', count: deals.filter((d: Deal) => d.status === 'inquiry').length.toString(), color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
     { icon: <Eye size={16} />, label: 'Pending', count: deals.filter((d: Deal) => d.status === 'waiting_payment').length.toString(), color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
-    { icon: <CheckCircle2 size={16} />, label: 'Revenue', count: `₦${deals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (d.amount || 0), 0) / 1000000}M`, color: 'text-accent', bg: 'bg-accent/5 border-accent/10' },
+    { icon: <CheckCircle2 size={16} />, label: 'Revenue', count: formatMetricRevenue(revenue), color: 'text-accent', bg: 'bg-accent/5 border-accent/10' },
   ]
 
   // Follow up = inquiry or pending

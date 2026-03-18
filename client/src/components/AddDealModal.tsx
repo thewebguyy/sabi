@@ -1,15 +1,122 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, User, ShoppingBag, DollarSign, StickyNote, Bell, Sparkles, ChevronDown } from 'lucide-react'
+import { X, User, ShoppingBag, StickyNote, Bell, Sparkles, ChevronDown, CheckCircle2 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useStore } from '../store/useStore'
+import axios from 'axios'
 
 interface AddDealModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
+const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose, onSuccess }) => {
+  const { user } = useStore()
   const [extracting, setExtracting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [magicText, setMagicText] = useState('')
   
+  // Form State
+  const [contactInfo, setContactInfo] = useState('')
+  const [title, setTitle] = useState('')
+  const [amount, setAmount] = useState('')
+  const [status, setStatus] = useState('pending')
+  const [summary, setSummary] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  const handleMagicExtract = async () => {
+    if (!magicText) return
+    setExtracting(true)
+    setError(null)
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/ai/extract-deal`, { 
+        chatText: magicText 
+      }, {
+        headers: { Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
+      })
+      
+      const data = response.data
+      if (data) {
+        setTitle(data.title || '')
+        setAmount(data.amount?.toString() || '')
+        setSummary(data.summary || '')
+        // We still need contact name, usually extracted from chat too or asked manually
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError('AI Extraction failed. Try manual entry.')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !contactInfo || !title) return
+    
+    setSaving(true)
+    setError(null)
+    try {
+      // 1. Resolve or Create Contact
+      let contactId: string
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .or(`phone.eq.${contactInfo},name.eq.${contactInfo}`)
+        .eq('user_id', user.id)
+        .single()
+
+      if (existingContact) {
+        contactId = existingContact.id
+      } else {
+        const isPhone = /^\+?[0-9]{10,15}$/.test(contactInfo.replace(/\s/g, ''))
+        const { data: newContact, error: contactError } = await supabase
+          .from('contacts')
+          .insert([{
+            user_id: user.id,
+            name: isPhone ? contactInfo : contactInfo,
+            phone: isPhone ? contactInfo : null,
+            last_seen: new Date()
+          }])
+          .select()
+          .single()
+        
+        if (contactError) throw contactError
+        contactId = newContact.id
+      }
+
+      // 2. Create Deal
+      const { error: dealError } = await supabase
+        .from('deals')
+        .insert([{
+          user_id: user.id,
+          contact_id: contactId,
+          title,
+          amount: parseFloat(amount) || 0,
+          status,
+          summary: summary || 'Manually added deal',
+          created_at: new Date()
+        }])
+
+      if (dealError) throw dealError
+
+      setShowSuccess(true)
+      setTimeout(() => {
+        setShowSuccess(false)
+        onClose()
+        if (onSuccess) onSuccess()
+      }, 1500)
+
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || 'Failed to save deal')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -48,13 +155,13 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
                   <textarea 
                     className="w-full h-24 bg-surface-2/50 border border-white/5 rounded-2xl p-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all placeholder:text-text-muted/40 resize-none"
                     placeholder="Paste a WhatsApp chat here... Sabi will auto-fill the form."
+                    value={magicText}
+                    onChange={(e) => setMagicText(e.target.value)}
                   />
                   <button 
-                    onClick={() => {
-                        setExtracting(true)
-                        setTimeout(() => setExtracting(false), 2000)
-                    }}
-                    className="w-full py-3 bg-accent/10 text-accent font-bold rounded-xl text-xs flex items-center justify-center gap-2 hover:bg-accent/20 transition-all"
+                    onClick={handleMagicExtract}
+                    disabled={extracting || !magicText}
+                    className="w-full py-3 bg-accent/10 text-accent font-bold rounded-xl text-xs flex items-center justify-center gap-2 hover:bg-accent/20 transition-all disabled:opacity-50"
                   >
                      {extracting ? <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div> : (
                         <>
@@ -67,15 +174,20 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
                <div className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em] text-center mb-[-1rem]">OR MANUALLY FILL</div>
 
                {/* Manual Form */}
-               <form className="space-y-6">
+               <form onSubmit={handleSave} className="space-y-6">
+                  {error && <div className="p-4 bg-hot/10 border border-hot/20 rounded-2xl text-hot text-xs font-bold text-center">{error}</div>}
+                  
                   <div className="space-y-2">
                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">Contact Name / Phone</label>
                      <div className="relative group">
                         <User className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors" size={18} />
                         <input 
+                           required
                            type="text" 
-                           placeholder="e.g. Chidinma O."
-                           className="w-full bg-surface-2 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all"
+                           placeholder="e.g. Chidinma O. or +234..."
+                           className="w-full bg-surface-2 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all font-body"
+                           value={contactInfo}
+                           onChange={(e) => setContactInfo(e.target.value)}
                         />
                      </div>
                   </div>
@@ -85,9 +197,12 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
                      <div className="relative group">
                         <ShoppingBag className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors" size={18} />
                         <input 
+                           required
                            type="text" 
                            placeholder="e.g. Ankara Fabric (6 yards)"
-                           className="w-full bg-surface-2 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all"
+                           className="w-full bg-surface-2 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all font-body"
+                           value={title}
+                           onChange={(e) => setTitle(e.target.value)}
                         />
                      </div>
                   </div>
@@ -101,6 +216,8 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
                               type="number" 
                               placeholder="0"
                               className="w-full bg-surface-2 border border-white/5 rounded-2xl py-4 pl-10 pr-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all font-mono"
+                              value={amount}
+                              onChange={(e) => setAmount(e.target.value)}
                            />
                         </div>
                      </div>
@@ -109,10 +226,12 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
                         <div className="relative group">
                            <select 
                               className="w-full bg-surface-2 border border-white/5 rounded-2xl py-4 pl-4 pr-10 text-sm text-text-primary outline-none focus:border-accent/40 transition-all appearance-none cursor-pointer"
+                              value={status}
+                              onChange={(e) => setStatus(e.target.value)}
                            >
-                              <option>New Inquiry</option>
-                              <option>Conversation</option>
-                              <option>Waiting Payment</option>
+                              <option value="inquiry">New Inquiry</option>
+                              <option value="pending">Conversation</option>
+                              <option value="waiting_payment">Waiting Payment</option>
                            </select>
                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
                         </div>
@@ -125,29 +244,25 @@ const AddDealModal: React.FC<AddDealModalProps> = ({ isOpen, onClose }) => {
                         <StickyNote className="absolute left-4 top-4 text-text-muted group-focus-within:text-accent transition-colors" size={18} />
                         <textarea 
                            placeholder="e.g. Needs it by Friday..."
-                           className="w-full h-24 bg-surface-2 border border-white/5 rounded-2xl p-4 pl-12 text-sm text-text-primary outline-none focus:border-accent/40 transition-all resize-none"
+                           className="w-full h-24 bg-surface-2 border border-white/5 rounded-2xl p-4 pl-12 text-sm text-text-primary outline-none focus:border-accent/40 transition-all resize-none font-body"
+                           value={summary}
+                           onChange={(e) => setSummary(e.target.value)}
                         />
                      </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-surface-2 rounded-2xl border border-white/5">
-                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
-                           <Bell size={18} />
-                        </div>
-                        <span className="text-sm font-bold text-text-primary">Set Reminder</span>
-                     </div>
-                     <div className="w-10 h-6 bg-accent rounded-full p-1">
-                        <div className="w-4 h-4 bg-white rounded-full translate-x-4"></div>
-                     </div>
-                  </div>
-
                   <button 
-                     type="button" 
-                     onClick={onClose}
-                     className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg shadow-[0_15px_30px_rgba(37,211,102,0.3)] active:scale-95 transition-all"
+                     type="submit" 
+                     disabled={saving || showSuccess}
+                     className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg shadow-[0_15px_30px_rgba(37,211,102,0.3)] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                   >
-                     Save Deal
+                     {saving ? <div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin"></div> : (
+                        showSuccess ? (
+                           <>
+                              Saved Successfully! <CheckCircle2 size={24} />
+                           </>
+                        ) : 'Save Deal'
+                     )}
                   </button>
                </form>
             </div>

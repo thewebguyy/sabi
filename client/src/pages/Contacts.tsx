@@ -69,7 +69,14 @@ const Contacts: React.FC = () => {
     const revenue = contactDeals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (d.amount || 0), 0)
     
     // Simple score calculation (MVP)
-    const score = c.trust_score || Math.min(100, (contactDeals.length * 20) + (revenue > 50000 ? 50 : 20))
+    const calculateTrustScore = (dealCount: number, revenue: number) => {
+      let score = 20; // Base score
+      score += Math.min(50, dealCount * 10); // Frequency (up to 50 points)
+      score += Math.min(30, Math.floor(revenue / 5000)); // Volume (up to 30 points)
+      return Math.min(100, score);
+    };
+
+    const score = calculateTrustScore(contactDeals.length, revenue);
 
     const avatarColors = [
       'bg-accent/10 text-accent border border-accent/20',

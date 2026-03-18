@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Phone, Lock, ArrowRight, ShieldCheck, CheckCircle2, Building, Eye, EyeOff, X } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { useToast } from '../context/ToastContext'
 import axios from 'axios'
 
 const Auth: React.FC = () => {
@@ -16,6 +17,7 @@ const Auth: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   
   const { signIn, signUp } = useStore()
+  const { toast } = useToast()
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,18 +51,22 @@ const Auth: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      if (otp === '123456') { // Demo code
-        const fakeEmail = `${phone.replace(/\+/g, '')}@sabi.app`;
-        if (isLogin) {
-          await signIn(fakeEmail, password);
-        } else {
-          await signUp(fakeEmail, password, businessName);
-        }
+      // 1. Verify OTP with Backend
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-otp`, { phone, otp });
+
+      // 2. Auth with Supabase using fake email bridge
+      const fakeEmail = `${phone.replace(/\+/g, '')}@sabi.app`;
+      if (isLogin) {
+        await signIn(fakeEmail, password);
+        toast('Welcome back Oga!', 'success');
       } else {
-        throw new Error('Invalid OTP code. Try 123456 for demo.');
+        await signUp(fakeEmail, password, businessName);
+        toast('Account created! Welcome to Sabi.', 'success');
       }
     } catch (err: any) {
-      setError(err.message || 'Auth failed');
+      const msg = err.response?.data?.error || err.message || 'Auth failed';
+      setError(msg);
+      toast(msg, 'error');
     } finally {
       setLoading(false);
     }

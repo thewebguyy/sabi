@@ -50,7 +50,7 @@ const aiRateLimiter = rateLimit({
 
 // --- ROUTES ---
 
-// Simple OTP Store (In-memory for demo, should be Redis)
+// Simple OTP Store (In-memory for demo, should be Redis in production)
 const otpStore = new Map();
 
 // 0. Auth
@@ -59,28 +59,64 @@ app.post('/api/auth/send-otp', async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'Phone required' });
   try {
     const otp = await sendOTP(phone);
-    otpStore.set(phone, { otp: '123456', expires: Date.now() + 600000 }); // Bypass 123456 for demo
-    res.json({ success: true });
+    // For demo, we still allow 123456 as a universal bypass, but we store the real one too.
+    otpStore.set(phone, { otp: otp.toString(), expires: Date.now() + 600000 });
+    res.json({ success: true, message: 'OTP sent' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed' });
+    console.error('OTP error:', error);
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const { phone, otp } = req.body;
+  const stored = otpStore.get(phone);
+
+  if (otp === '123456' || (stored && stored.otp === otp && stored.expires > Date.now())) {
+    otpStore.delete(phone);
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ error: 'Invalid or expired OTP' });
   }
 });
 
 // 1. AI Extraction
-// ... keep AI code ...
+app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res) => {
+  const { chatText } = req.body;
+  if (!chatText) return res.status(400).json({ error: 'No text' });
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: 'Analyze chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply, intent }' },
+        { role: "user", content: chatText }
+      ],
+      response_format: { type: "json_object" }
+    });
+    res.json(JSON.parse(response.choices[0].message.content));
+  } catch (error) {
+    console.error('AI Error:', error);
+    res.status(500).json({ error: 'AI analysis failed' });
+  }
+});
 
 // 2. WhatsApp Webhook (Fixed User Resolution)
 app.post('/api/webhook/whatsapp', async (req, res) => {
   const { body, from, to } = req.body;
   
-  // SECURE: Verify HMAC signature should go here
-  // SECURE: Any input sanitization
+  // SECURE: Verify HMAC signature should go here in production
+  
+  if (!body || !from || !to) return res.status(400).json({ error: 'Missing fields' });
 
   try {
-    // Resolve which Sabi user this belongs to
-    const { data: users } = await supabase.from('users').select('id').eq('phone', to).single();
-    if (!users) return res.status(404).json({ error: 'Vendor not found' });
-    const userId = users.id;
+    // Resolve which Sabi user (vendor) this belongs to based on the destination number
+    const { data: user, error: userError } = await supabase.from('users').select('id').eq('phone', to).single();
+    if (userError || !user) {
+        console.error('Vendor not found for number:', to);
+        return res.status(404).json({ error: 'Vendor not found' });
+    }
+    const userId = user.id;
 
     let { data: contact } = await supabase.from('contacts').select('id').eq('phone', from).eq('user_id', userId).single();
     if (!contact) {
@@ -105,50 +141,94 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       dealId = deal?.id;
     }
 
-    await supabase.from('chat_messages').insert([{ user_id: userId, contact_id: contact.id, deal_id: dealId, body, direction: 'inbound' }]);
+    await supabase.from('chat_messages').insert([{ user_id: userId, contact_id: contact.id, deal_id: dealId, body, direction: 'inbound', timestamp: new Date() }]);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: 'Webhook error' });
+    console.error('Webhook processing error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
-// 3. Deals API (keep)
+// 3. Deals API
+app.get('/api/deals', authMiddleware, async (req, res) => {
+  try {
+      const { data, error } = await supabase.from('deals').select('*, contacts(*)').eq('user_id', req.user.id);
+      if (error) throw error;
+      res.json(data || []);
+  } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch deals' });
+  }
+});
 
 // 4. Paystack
 app.post('/api/payments/initialize', authMiddleware, async (req, res) => {
-  // ... keep ...
+  const { dealId, amount } = req.body;
+  if (!dealId || !amount) return res.status(400).json({ error: 'Missing dealId or amount' });
+
+  try {
+    const response = await axios.post('https://api.paystack.co/transaction/initialize', {
+      email: `${req.user.phone}@sabi.app`,
+      amount: amount * 100, // kobo
+      metadata: { deal_id: dealId, user_id: req.user.id }
+    }, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+    
+    const { authorization_url, reference } = response.data.data;
+    await supabase.from('payments').insert([{ deal_id: dealId, amount, verified_status: 'pending' }]);
+    res.json({ checkoutUrl: authorization_url, reference });
+  } catch (error) {
+    console.error('Payment init error:', error);
+    res.status(500).json({ error: 'Payment initialization failed' });
+  }
 });
 
 app.get('/api/payments/verify/:reference', authMiddleware, async (req, res) => {
   const { reference } = req.params;
-  // ... rest of verify logic ...
+
   try {
     const response = await axios.get(`https://api.paystack.co/transaction/verify/${reference}`, {
       headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
     });
+
     if (response.data.data.status === 'success') {
       const { deal_id } = response.data.data.metadata;
+      
+      // Update payment record
       await supabase.from('payments').update({ verified_status: 'verified' }).eq('deal_id', deal_id);
+      // Mark deal as paid
       await supabase.from('deals').update({ status: 'paid' }).eq('id', deal_id);
+      
       res.json({ status: 'success' });
     } else {
       res.json({ status: 'failed' });
     }
   } catch (error) {
-    res.status(500).json({ error: 'Verify error' });
+    console.error('Verify error:', error);
+    res.status(500).json({ error: 'Payment verification failed' });
   }
 });
 
 // 5. Analytics
 app.get('/api/analytics/summary', authMiddleware, async (req, res) => {
-  const { data: deals } = await supabase.from('deals').select('amount, status').eq('user_id', req.user.id);
-  const summary = (deals || []).reduce((acc, d) => {
-    acc.totalDeals++;
-    if (d.status === 'paid') { acc.closedDeals++; acc.revenue += (d.amount || 0); }
-    if (d.status === 'ghosted') acc.ghosted++;
-    return acc;
-  }, { totalDeals: 0, closedDeals: 0, revenue: 0, ghosted: 0 });
-  res.json(summary);
+  try {
+      // Use Supabase aggregate queries or simple select for MVP
+      const { data: deals, error } = await supabase.from('deals').select('amount, status').eq('user_id', req.user.id);
+      if (error) throw error;
+
+      const summary = (deals || []).reduce((acc, d) => {
+        acc.totalDeals++;
+        if (d.status === 'paid') { 
+            acc.closedDeals++; 
+            acc.revenue += (Number(d.amount) || 0); 
+        }
+        if (d.status === 'ghosted') acc.ghosted++;
+        return acc;
+      }, { totalDeals: 0, closedDeals: 0, revenue: 0, ghosted: 0 });
+
+      res.json(summary);
+  } catch (error) {
+      console.error('Analytics error:', error);
+      res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
 });
 
 app.listen(port, () => console.log(`Sabi Server on ${port}`));

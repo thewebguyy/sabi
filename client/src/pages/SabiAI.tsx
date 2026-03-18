@@ -1,50 +1,87 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MessageSquare, Flame, Sparkles, Copy, CheckCircle2, Save, Trash2, ArrowRight } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import axios from 'axios'
+import { useStore } from '../store/useStore'
 
 const SabiAI: React.FC = () => {
+  const { user } = useStore()
   const [chatText, setChatText] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [result, setResult] = useState<any>(null)
-  const [pasted, setPasted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const handleAnalyze = async () => {
     if (!chatText.trim()) return
     setAnalyzing(true)
     setResult(null)
+    setError(null)
     
-    // Simulate API call to /api/ai/extract-deal
-    setTimeout(() => {
-      setResult({
-        is_deal: true,
-        item: "Ankara Fabric (6 yards)",
-        price: 15000,
-        currency: "NGN",
-        customer_name: "Chidinma",
-        customer_constraint: "Needs it by Friday",
-        summary: "Chidinma is inquiring about the blue Ankara fabric. She's interested but needs delivery by Friday for an event.",
-        suggested_reply: "Hi Chidinma! The blue Ankara is available for ₦15,000 for 6 yards. If you pay now, I can definitely get it to you before Friday! Should I send the account details?",
-        intent: "hot_lead"
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/ai/extract-deal`, { 
+        chatText 
+      }, {
+        headers: { Authorization: `Bearer ${session?.access_token}` }
       })
+      
+      setResult(response.data)
+    } catch (err: any) {
+      console.error(err)
+      setError(err.response?.data?.error || 'AI analysis failed. Please try again.')
+    } finally {
       setAnalyzing(false)
-    }, 2500)
+    }
+  }
+
+  const handleSaveAsDeal = async () => {
+    if (!result || !user) return
+    setSaving(true)
+    try {
+      // 1. Create/Find generic contact for this AI session
+      const { data: contact } = await supabase
+        .from('contacts')
+        .insert([{
+          user_id: user.id,
+          name: result.title?.split(' ')[0] || 'AI Prospect',
+          phone: null,
+          last_seen: new Date()
+        }])
+        .select()
+        .single()
+
+      if (!contact) throw new Error('Failed to create contact')
+
+      // 2. Create Deal
+      const { error: dealError } = await supabase
+        .from('deals')
+        .insert([{
+          user_id: user.id,
+          contact_id: contact.id,
+          title: result.title || 'AI Extracted Deal',
+          amount: result.amount || 0,
+          status: 'pending',
+          summary: result.summary,
+          ai_suggested_reply: result.ai_reply,
+          created_at: new Date()
+        }])
+
+      if (dealError) throw dealError
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err: any) {
+      console.error(err)
+      setError('Failed to save deal.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)
-    // Add toast logic here
-  }
-
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText()
-      setChatText(text)
-      setPasted(true)
-      setTimeout(() => setPasted(false), 2000)
-    } catch (e) {
-      console.error('Clipboard error:', e)
-    }
   }
 
   return (
@@ -69,7 +106,7 @@ const SabiAI: React.FC = () => {
             />
             <div className="flex justify-between items-center pt-2">
               <button 
-                onClick={handlePaste}
+                onClick={async () => setChatText(await navigator.clipboard.readText())}
                 className="text-xs font-bold text-text-muted flex items-center gap-1.5 hover:text-accent transition-colors"
               >
                 <Copy size={14} /> Paste from Clipboard
@@ -84,10 +121,12 @@ const SabiAI: React.FC = () => {
           </div>
         </div>
 
+        {error && <div className="p-4 bg-hot/10 border border-hot/20 rounded-2xl text-hot text-xs font-bold text-center">{error}</div>}
+
         <button 
           onClick={handleAnalyze}
           disabled={!chatText.trim() || analyzing}
-          className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(37,211,102,0.2)] disabled:opacity-50 disabled:scale-100 active:scale-95 transition-all"
+          className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(37,211,102,0.2)] disabled:opacity-50 active:scale-95 transition-all"
         >
           {analyzing ? (
             <>
@@ -117,11 +156,11 @@ const SabiAI: React.FC = () => {
               {/* Intent Badge */}
               <div className="flex justify-center">
                  <div className={`px-6 py-2 rounded-full border flex items-center gap-2 ${
-                    result.intent === 'hot_lead' ? 'bg-hot/10 border-hot text-hot' : 'bg-accent/10 border-accent text-accent'
+                    result.is_deal ? 'bg-hot/10 border-hot text-hot' : 'bg-accent/10 border-accent text-accent'
                  }`}>
                    <Flame size={18} fill="currentColor" />
                    <span className="font-syne font-extrabold uppercase tracking-[0.2em] text-[10px]">
-                      {result.intent === 'hot_lead' ? '🔥 Hot Lead Detected' : '💰 Ready to Pay'}
+                      {result.is_deal ? '🔥 Hot Lead Detected' : '💬 Inquiry Only'}
                    </span>
                  </div>
               </div>
@@ -135,16 +174,16 @@ const SabiAI: React.FC = () => {
                  <div className="p-6 space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-text-muted uppercase">Customer</label>
-                          <p className="font-bold">{result.customer_name}</p>
+                          <label className="text-[10px] font-bold text-text-muted uppercase">Intent</label>
+                          <p className="font-bold">{result.intent || 'Unknown'}</p>
                        </div>
                        <div className="space-y-1">
                           <label className="text-[10px] font-bold text-text-muted uppercase">Price</label>
-                          <p className="font-mono font-bold text-accent">₦{result.price.toLocaleString()}</p>
+                          <p className="font-mono font-bold text-accent">₦{(result.amount || 0).toLocaleString()}</p>
                        </div>
                        <div className="col-span-2 space-y-1">
-                          <label className="text-[10px] font-bold text-text-muted uppercase">Item</label>
-                          <p className="font-medium text-lg">{result.item}</p>
+                          <label className="text-[10px] font-bold text-text-muted uppercase">Title / Item</label>
+                          <p className="font-medium text-lg">{result.title}</p>
                        </div>
                     </div>
 
@@ -157,20 +196,25 @@ const SabiAI: React.FC = () => {
                        <div className="flex justify-between items-center">
                           <label className="text-[10px] font-bold text-text-muted uppercase">Suggested Reply</label>
                           <button 
-                            onClick={() => handleCopy(result.suggested_reply)}
+                            onClick={() => handleCopy(result.ai_reply)}
                             className="text-xs font-bold text-accent flex items-center gap-1.5"
                           >
                             <Copy size={12} /> Copy Reply
                           </button>
                        </div>
-                       <div className="bg-primary/40 p-4 rounded-2xl border border-accent/10 text-sm leading-relaxed relative group">
-                          {result.suggested_reply}
+                       <div className="bg-primary/40 p-4 rounded-2xl border border-accent/10 text-sm leading-relaxed">
+                          {result.ai_reply}
                        </div>
                     </div>
                     
-                    <button className="w-full bg-surface-2 border border-accent/30 text-accent font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-accent/10 transition-colors">
-                       <Save size={18} /> Save as Deal
-                       <ArrowRight size={18} />
+                    <button 
+                      onClick={handleSaveAsDeal}
+                      disabled={saving || saved}
+                      className="w-full bg-surface-2 border border-accent/30 text-accent font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-accent/10 transition-colors disabled:opacity-50"
+                    >
+                       {saving ? <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"></div> : (
+                         saved ? <>Saved to Pipeline <CheckCircle2 size={18} /></> : <><Save size={18} /> Save as Deal <ArrowRight size={18} /></>
+                       )}
                     </button>
                  </div>
               </div>
