@@ -59,7 +59,7 @@ const DealDetail: React.FC = () => {
     setLoadingReminder(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !deal) return
 
       const { error } = await supabase
         .from('reminders')
