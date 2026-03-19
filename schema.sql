@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS public.users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     whatsapp_connected BOOLEAN DEFAULT false,
     plan TEXT DEFAULT 'free', -- 'free' | 'grind' | 'sabi_pro'
-    has_seeded BOOLEAN DEFAULT false
+    has_seeded BOOLEAN DEFAULT false,
+    notification_preferences JSONB DEFAULT '{"summary": true, "ghosting": true, "payments": true}'::jsonb
 );
 
 -- 1.1 OTP Codes Table (for persistent across instances)
@@ -89,8 +90,10 @@ ALTER TABLE public.deals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.otp_codes ENABLE ROW LEVEL SECURITY;
 
 -- Basic RLS Policies (Allow access to own records)
+-- No public access policies for otp_codes, server uses service role.
 CREATE POLICY "Users can only see their own data" ON public.users FOR ALL USING (auth.uid() = id);
 CREATE POLICY "Contacts can only see their own user's data" ON public.contacts FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Deals can only see their own user's data" ON public.deals FOR ALL USING (auth.uid() = user_id);

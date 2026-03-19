@@ -8,17 +8,20 @@ export const sendSMS = async (phone, message) => {
   console.log(`[SMS ${provider}] Sending to ${phone}: ${message}`);
 
   try {
-    if (provider === 'termii') {
+    if (provider === 'termii' && process.env.TERMII_API_KEY) {
       // Real Termii call
-      // await axios.post('https://api.ng.termii.com/api/sms/send', {
-      //   to: phone,
-      //   from: 'SabiApp',
-      //   sms: message,
-      //   type: 'plain',
-      //   api_key: process.env.TERMII_API_KEY
-      // });
-    } else if (provider === 'africastalking') {
+      await axios.post('https://api.ng.termii.com/api/sms/send', {
+        to: phone,
+        from: 'SabiApp',
+        sms: message,
+        type: 'plain',
+        channel: 'dnd', // Many Nigerian numbers are on DND
+        api_key: process.env.TERMII_API_KEY
+      });
+    } else if (provider === 'africastalking' && process.env.AFRICASTALKING_API_KEY) {
       // Real Africa's Talking call
+    } else {
+      console.warn(`[SMS] Provider ${provider} keys missing. Message only logged.`);
     }
     
     return { success: true };

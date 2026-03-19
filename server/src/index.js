@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import rateLimit from 'express-rate-limit';
 import axios from 'axios';
+import crypto from 'crypto';
 import { sendOTP, sendSMS } from './utils/notifications.js';
 
 dotenv.config();
@@ -82,7 +83,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
     
     // Store in DB for persistence across instances
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
-    await supabase.from('otp_codes').delete().eq('phone', phone); // Clear old ones
+    await supabase.from('otp_codes').delete().eq('phone', phone); // Clear old one for this phone
+    await supabase.from('otp_codes').delete().lt('expires_at', new Date().toISOString()); // Cleanup orphaned expired codes
     await supabase.from('otp_codes').insert([{ phone, code: otp.toString(), expires_at: expiresAt }]);
     
     res.json({ success: true, message: 'OTP sent' });
@@ -217,12 +219,34 @@ app.post('/api/payments/initialize', authMiddleware, async (req, res) => {
     }, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
     
     const { authorization_url, reference } = response.data.data;
-    await supabase.from('payments').insert([{ deal_id: dealId, amount, verified_status: 'pending' }]);
+    await supabase.from('payments').insert([{ deal_id: dealId, amount, verified_status: 'pending', reference }]);
     res.json({ checkoutUrl: authorization_url, reference });
   } catch (error) {
     console.error('Payment init error:', error);
     res.status(500).json({ error: 'Payment initialization failed' });
   }
+});
+
+// Paystack Server-side Webhook (Crucial for Bank Transfer/USSD)
+app.post('/api/webhook/paystack', async (req, res) => {
+  const hash = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
+                     .update(JSON.stringify(req.body))
+                     .digest('hex');
+  
+  if (hash !== req.headers['x-paystack-signature']) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  const { event, data } = req.body;
+  if (event === 'charge.success') {
+    const { deal_id } = data.metadata;
+    
+    await supabase.from('payments').update({ verified_status: 'verified' }).eq('deal_id', deal_id);
+    await supabase.from('deals').update({ status: 'paid' }).eq('id', deal_id);
+    console.log(`[PAYSTACK] Payment confirmed for deal: ${deal_id}`);
+  }
+
+  res.status(200).send('OK');
 });
 
 app.get('/api/payments/verify/:reference', authMiddleware, async (req, res) => {
@@ -236,9 +260,7 @@ app.get('/api/payments/verify/:reference', authMiddleware, async (req, res) => {
     if (response.data.data.status === 'success') {
       const { deal_id } = response.data.data.metadata;
       
-      // Update payment record
       await supabase.from('payments').update({ verified_status: 'verified' }).eq('deal_id', deal_id);
-      // Mark deal as paid
       await supabase.from('deals').update({ status: 'paid' }).eq('id', deal_id);
       
       res.json({ status: 'success' });

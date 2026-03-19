@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Flame, Clock, Eye, CheckCircle2, Plus, MessageCircle, MoreHorizontal } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import AddDealModal from '../components/AddDealModal'
-import { useStore } from '../store/useStore'
+import { useStore, Deal } from '../store/useStore'
 import { getWhatsAppLink } from '../lib/utils'
 
 const MetricCard = ({ icon, label, count, color, bg }: { icon: React.ReactNode, label: string, count: string, color: string, bg: string }) => (
@@ -76,22 +76,22 @@ const Dashboard: React.FC = () => {
     return `₦${amount}`;
   };
 
-  const revenue = deals.filter((d: any) => d.status === 'paid').reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
+  const revenue = deals.filter((d: Deal) => d.status === 'paid').reduce((sum: number, d: Deal) => sum + (Number(d.amount) || 0), 0);
 
   const metrics = [
-    { icon: <Flame size={16} />, label: 'Hot Leads', count: deals.filter((d: any) => d.status === 'pending').length.toString(), color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
-    { icon: <Clock size={16} />, label: 'Waiting', count: deals.filter((d: any) => d.status === 'inquiry').length.toString(), color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
-    { icon: <Eye size={16} />, label: 'Pending', count: deals.filter((d: any) => d.status === 'waiting_payment').length.toString(), color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
+    { icon: <Flame size={16} />, label: 'Hot Leads', count: deals.filter((d: Deal) => d.status === 'pending').length.toString(), color: 'text-hot', bg: 'bg-hot/5 border-hot/10' },
+    { icon: <Clock size={16} />, label: 'Waiting', count: deals.filter((d: Deal) => d.status === 'inquiry').length.toString(), color: 'text-yellow-400', bg: 'bg-yellow-400/5 border-yellow-400/10' },
+    { icon: <Eye size={16} />, label: 'Pending', count: deals.filter((d: Deal) => d.status === 'waiting_payment').length.toString(), color: 'text-blue-400', bg: 'bg-blue-400/5 border-blue-400/10' },
     { icon: <CheckCircle2 size={16} />, label: 'Revenue', count: formatMetricRevenue(revenue), color: 'text-accent', bg: 'bg-accent/5 border-accent/10' },
   ]
 
   // Follow up = inquiry or pending
-  const followUpDeals = deals.filter((d: any) => d.status === 'inquiry' || d.status === 'pending')
+  const followUpDeals = deals.filter((d: Deal) => d.status === 'inquiry' || d.status === 'pending')
 
   // Filtered All Deals
   const filteredDeals = filter === 'All' 
     ? deals 
-    : deals.filter((d: any) => d.status.toLowerCase() === filter.toLowerCase());
+    : deals.filter((d: Deal) => d.status.toLowerCase() === filter.toLowerCase());
 
   if (loading) {
     return (
@@ -143,7 +143,7 @@ const Dashboard: React.FC = () => {
               className="space-y-4"
             >
               {followUpDeals.length > 0 ? (
-                followUpDeals.map((d: any) => (
+                followUpDeals.map((d: Deal) => (
                   <Link key={d.id} to={`/deals/${d.id}`}>
                     <DealCard 
                       name={d.contacts?.name || 'Unknown'} 
@@ -189,7 +189,7 @@ const Dashboard: React.FC = () => {
                    </button>
                  ))}
               </div>
-              {filteredDeals.length > 0 ? filteredDeals.map((d: any) => (
+              {filteredDeals.length > 0 ? filteredDeals.map((d: Deal) => (
                  <Link key={d.id} to={`/deals/${d.id}`}>
                    <DealCard 
                      name={d.contacts?.name || 'Unknown'} 

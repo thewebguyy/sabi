@@ -9,7 +9,7 @@ const Connect: React.FC = () => {
   const [step, setStep] = useState(1)
   const [progress, setProgress] = useState(0)
   const navigate = useNavigate()
-  const { user } = useStore()
+  const { user, deals } = useStore()
 
   useEffect(() => {
     if (step === 2) {
@@ -168,35 +168,29 @@ const Connect: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-4">
-              <div className="bg-surface p-5 rounded-3xl border border-white/5 flex items-center gap-4 relative overflow-hidden">
-                <div className="absolute top-0 right-0 py-1.5 px-3 bg-hot text-primary text-[10px] font-extrabold uppercase rounded-bl-xl tracking-tight">New Lead</div>
-                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center font-bold text-accent">CH</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-base">Chidinma</h4>
-                  <p className="text-xs text-text-muted">Ankara Fabric enquiry</p>
-                  <p className="text-sm font-mono font-medium text-accent mt-1">₦15,000</p>
+              {deals.length > 0 ? (
+                deals.slice(0, 3).map((d: any, i: number) => (
+                  <div key={d.id} className="bg-surface p-5 rounded-3xl border border-white/5 flex items-center gap-4 relative overflow-hidden">
+                    <div className={`absolute top-0 right-0 py-1.5 px-3 ${d.status === 'paid' ? 'bg-accent' : 'bg-hot'} text-primary text-[10px] font-extrabold uppercase rounded-bl-xl tracking-tight`}>
+                      {d.status === 'pending' ? 'New Lead' : d.status === 'paid' ? 'Closed' : 'Action Required'}
+                    </div>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold ${i === 0 ? 'bg-primary text-accent' : 'bg-surface-2 text-text-primary'}`}>
+                      {d.contacts?.name?.substring(0, 2).toUpperCase() || '??'}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-base">{d.contacts?.name || 'Unknown'}</h4>
+                      <p className="text-xs text-text-muted truncate w-40">{d.title}</p>
+                      <p className={`text-sm font-mono font-medium mt-1 ${d.status === 'paid' ? 'text-accent' : 'text-text-primary'}`}>
+                        {d.amount > 0 ? `₦${d.amount.toLocaleString()}` : 'Price Pending'}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-10 text-center text-text-muted">
+                  Searching for leads in your chat history...
                 </div>
-              </div>
-
-              <div className="bg-surface p-5 rounded-3xl border border-white/5 flex items-center gap-4 relative overflow-hidden">
-                <div className="absolute top-0 right-0 py-1.5 px-3 bg-hot text-primary text-[10px] font-extrabold uppercase rounded-bl-xl tracking-tight">New Lead</div>
-                <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center font-bold text-text-primary">KU</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-base">Kunle</h4>
-                  <p className="text-xs text-text-muted">Size 10 Sneakers</p>
-                  <p className="text-sm font-mono font-medium text-text-muted mt-1">Price Pending</p>
-                </div>
-              </div>
-
-              <div className="bg-surface p-5 rounded-3xl border border-white/5 flex items-center gap-4 relative overflow-hidden border-orange-500/20">
-                <div className="absolute top-0 right-0 py-1.5 px-3 bg-gold text-primary text-[10px] font-extrabold uppercase rounded-bl-xl tracking-tight">Follow Up</div>
-                <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center font-bold text-text-primary">BL</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-base">Blessing</h4>
-                  <p className="text-xs text-text-muted">Waiting for payment</p>
-                  <p className="text-sm font-mono font-medium text-gold mt-1">₦24,500</p>
-                </div>
-              </div>
+              )}
             </div>
 
             <button 

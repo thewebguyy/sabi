@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Search, UserPlus, Phone, MessageSquare, ShieldCheck, Clock, ChevronRight, Hash, Filter } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useContacts, Contact } from '../hooks/useContacts'
-import { useDeals, Deal } from '../hooks/useDeals'
+import { useStore, Deal } from '../store/useStore'
+import AddContactModal from '../components/AddContactModal'
 
 const TrustScore = ({ score }: { score: number }) => {
   const color = score >= 80 ? 'bg-accent' : score >= 50 ? 'bg-gold' : 'bg-hot'
@@ -58,10 +59,12 @@ const ContactCard = ({ name, phone, deals, revenue, lastSeen, score, avatarColor
   </motion.div>
 )
 
+
 const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
-  const { contacts, loading: contactsLoading } = useContacts()
-  const { deals, loading: dealsLoading } = useDeals()
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const { contacts, loading: contactsLoading, refresh: refreshContacts } = useContacts()
+  const { deals, loading: dealsLoading } = useStore()
 
   // Derive stats per contact
   const contactsWithStats = contacts.map((c: Contact) => {
@@ -119,6 +122,7 @@ const Contacts: React.FC = () => {
           </h2>
           <motion.button 
             whileTap={{ scale: 0.95 }}
+            onClick={() => setIsAddModalOpen(true)}
             className="w-10 h-10 rounded-2xl bg-accent text-primary flex items-center justify-center shadow-[0_5px_15px_rgba(37,211,102,0.3)] border border-white/10"
           >
             <UserPlus size={20} />
@@ -178,6 +182,12 @@ const Contacts: React.FC = () => {
             </div>
          </div>
       </div>
+
+      <AddContactModal 
+        isOpen={isAddModalOpen} 
+        onClose={() => setIsAddModalOpen(false)} 
+        onSuccess={() => refreshContacts()} 
+      />
     </div>
   )
 }

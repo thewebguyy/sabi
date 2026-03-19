@@ -6,7 +6,7 @@ import {
   LineChart, Line, Cell, PieChart, Pie 
 } from 'recharts'
 import { useAnalytics } from '../hooks/useAnalytics'
-import { useDeals, Deal } from '../hooks/useDeals'
+import { useStore, Deal } from '../store/useStore'
 
 const AnalyticsCard = ({ icon, label, value, trend, trendColor }: any) => (
   <div className="bg-surface p-5 rounded-3xl border border-white/5 space-y-4 shadow-xl">
@@ -29,7 +29,7 @@ const AnalyticsCard = ({ icon, label, value, trend, trendColor }: any) => (
 
 const Analytics: React.FC = () => {
   const { summary, loading: summaryLoading } = useAnalytics()
-  const { deals, loading: dealsLoading } = useDeals()
+  const { deals, loading: dealsLoading } = useStore()
 
   // Derived status data for chart
   const statusData = [

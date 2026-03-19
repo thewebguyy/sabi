@@ -32,14 +32,19 @@ const SettingItem = ({ icon, label, value, onClick, color, isToggle, valueChecke
 )
 
 const Settings: React.FC = () => {
-  const { user, signOut } = useStore()
-  const [notifications, setNotifications] = useState({
+  const { user, signOut, updateUserPreferences } = useStore()
+  const [whatsappConnected, setWhatsAppConnected] = useState(true)
+
+  const handleToggle = (key: 'summary' | 'ghosting' | 'payments') => {
+    if (!user) return;
+    updateUserPreferences({ [key]: !user.notification_preferences[key] });
+  }
+
+  const notifications = user?.notification_preferences || {
     summary: true,
     ghosting: true,
-    payments: false
-  })
-
-  const [whatsappConnected, setWhatsAppConnected] = useState(true)
+    payments: true
+  }
 
   return (
     <div className="pb-24 pt-4 space-y-10">
@@ -95,7 +100,7 @@ const Settings: React.FC = () => {
              value="Daily at 8:00 AM" 
              isToggle 
              valueChecked={notifications.summary}
-             onClick={() => setNotifications({...notifications, summary: !notifications.summary})}
+             onClick={() => handleToggle('summary')}
              color="text-accent" 
            />
            <SettingItem 
@@ -104,7 +109,7 @@ const Settings: React.FC = () => {
              value="After 18 hours" 
              isToggle 
              valueChecked={notifications.ghosting}
-             onClick={() => setNotifications({...notifications, ghosting: !notifications.ghosting})}
+             onClick={() => handleToggle('ghosting')}
              color="text-accent" 
            />
            <SettingItem 
@@ -113,7 +118,7 @@ const Settings: React.FC = () => {
              value="When proof received" 
              isToggle 
              valueChecked={notifications.payments}
-             onClick={() => setNotifications({...notifications, payments: !notifications.payments})}
+             onClick={() => handleToggle('payments')}
              color="text-accent" 
            />
         </div>

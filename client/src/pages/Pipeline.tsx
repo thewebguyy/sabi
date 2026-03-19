@@ -2,7 +2,7 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { Flame, Clock, Plus, GripVertical } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useDeals, Deal } from '../hooks/useDeals'
+import { useStore, Deal } from '../store/useStore'
 
 interface PipelineItem {
   id: string;
@@ -25,7 +25,7 @@ const PipelineColumn = ({ title, count, color, bg, items }: { title: string, cou
 
     <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar">
        {items.length > 0 ? (
-         items.map((item, i) => (
+         items.map((item) => (
            <Link key={item.id} to={`/deals/${item.id}`} className="block">
             <motion.div 
               initial={{ opacity: 0, x: 10 }}
@@ -61,30 +61,36 @@ const PipelineColumn = ({ title, count, color, bg, items }: { title: string, cou
 )
 
 const Pipeline: React.FC = () => {
-  const { deals, loading } = useDeals()
+  const { deals, loading } = useStore()
 
-  const stages = [
+  const columnDefinitions = [
     { title: 'Inquiry', status: 'inquiry', color: 'bg-yellow-400', bg: 'bg-yellow-400/5' },
-    { title: 'Conversation', status: 'pending', color: 'bg-blue-400', bg: 'bg-blue-400/5' },
+    { title: 'Pending', status: 'pending', color: 'bg-blue-400', bg: 'bg-blue-400/5' },
     { title: 'Waiting Payment', status: 'waiting_payment', color: 'bg-hot', bg: 'bg-hot/5' },
     { title: 'Paid', status: 'paid', color: 'bg-accent', bg: 'bg-accent/5' },
   ]
 
-  const columns = stages.map(stage => {
-    const stageItems = deals.filter((d: Deal) => d.status === stage.status)
-    return {
-      ...stage,
-      count: stageItems.length,
-      items: stageItems.map((d: Deal) => ({
+  const getColumnDeals = (colStatus: string) => {
+    return deals
+      .filter((d: Deal) => d.status === colStatus)
+      .map((d: Deal) => ({
         id: d.id,
         name: d.contacts?.name || 'Unknown',
         item: d.title,
         amount: `₦${d.amount?.toLocaleString()}`,
-        time: new Date(d.created_at).toLocaleDateString(),
-        urgent: d.status === 'pending'
+        time: new Date(d.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        urgent: d.status === 'pending',
       }))
-    }
-  })
+  }
+
+  const columns = columnDefinitions.map(colDef => {
+    const items = getColumnDeals(colDef.status);
+    return {
+      ...colDef,
+      count: items.length,
+      items: items
+    };
+  });
 
   if (loading) {
     return (

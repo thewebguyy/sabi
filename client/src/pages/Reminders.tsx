@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, Clock, Trash2, Send, Edit2, CheckCircle2, Calendar, Plus, MessageCircle } from 'lucide-react'
 import { useReminders, Reminder } from '../hooks/useReminders'
+import AddReminderModal from '../components/AddReminderModal'
 
 const ReminderCard = ({ r, onDelete, onSend }: { r: Reminder, onDelete: (id: string) => void, onSend: (r: Reminder) => void }) => (
   <motion.div 
@@ -53,7 +54,8 @@ const ReminderCard = ({ r, onDelete, onSend }: { r: Reminder, onDelete: (id: str
 
 const Reminders: React.FC = () => {
   const [activeTab, setActiveTab] = useState('upcoming')
-  const { reminders, loading, deleteReminder } = useReminders()
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const { reminders, loading, deleteReminder, refresh } = useReminders()
 
   const upcoming = reminders.filter(r => r.status === 'pending')
   const sent = reminders.filter(r => r.status === 'sent')
@@ -73,6 +75,7 @@ const Reminders: React.FC = () => {
         <h2 className="text-3xl font-syne font-extrabold">Reminders</h2>
         <motion.button 
           whileTap={{ scale: 0.95 }}
+          onClick={() => setIsAddModalOpen(true)}
           className="bg-accent text-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"
         >
           <Plus size={16} /> Add New
@@ -169,6 +172,12 @@ const Reminders: React.FC = () => {
             </button>
          </div>
       </div>
+
+      <AddReminderModal 
+        isOpen={isAddModalOpen} 
+        onClose={() => setIsAddModalOpen(false)} 
+        onSuccess={() => refresh()} 
+      />
     </div>
   )
 }

@@ -9,9 +9,16 @@ const TopBar: React.FC<{ onToggleNotify: () => void }> = ({ onToggleNotify }) =>
   const { user } = useStore();
   const location = useLocation();
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   const getPageTitle = () => {
     switch (location.pathname) {
-      case '/dashboard': return `Good morning, ${user?.business_name || 'Vendor'} 👋`;
+      case '/dashboard': return `${getGreeting()}, ${user?.business_name || 'Vendor'} 👋`;
       case '/pipeline': return 'Pipeline';
       case '/ai': return 'Sabi AI';
       case '/contacts': return 'Contacts';

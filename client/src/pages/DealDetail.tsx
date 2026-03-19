@@ -53,6 +53,41 @@ const DealDetail: React.FC = () => {
     }
   }
 
+  const [loadingReminder, setLoadingReminder] = useState(false)
+
+  const handleRemind = async () => {
+    setLoadingReminder(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { error } = await supabase
+        .from('reminders')
+        .insert([{
+          user_id: user.id,
+          deal_id: id,
+          trigger_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          message: `Follow up with ${deal.contacts?.name} about ${deal.title}`,
+          status: 'pending'
+        }])
+
+      if (error) throw error
+      
+      confetti({
+        particleCount: 50,
+        spread: 40,
+        origin: { y: 0.9 },
+        colors: ['#25D366']
+      })
+      
+      alert('Reminder set for 24 hours from now! ⏰')
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingReminder(false)
+    }
+  }
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)
   }
@@ -188,9 +223,19 @@ const DealDetail: React.FC = () => {
                  <CheckCircle2 size={24} />
                  <span className="text-[10px] font-bold mt-1 uppercase tracking-tight">Paid</span>
               </button>
-              <button className="flex-1 flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 text-text-muted hover:text-text-primary border border-white/5 transition-all">
-                 <Clock size={24} />
-                 <span className="text-[10px] font-bold mt-1 uppercase tracking-tight">Remind</span>
+              <button 
+                onClick={handleRemind}
+                disabled={loadingReminder}
+                className="flex-1 flex flex-col items-center justify-center p-3 rounded-2xl bg-surface-2 text-text-muted hover:text-text-primary border border-white/5 transition-all text-center"
+              >
+                 {loadingReminder ? (
+                   <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+                 ) : (
+                   <>
+                     <Clock size={24} />
+                     <span className="text-[10px] font-bold mt-1 uppercase tracking-tight">Remind</span>
+                   </>
+                 )}
               </button>
               <a 
                 href={getWhatsAppLink(deal.contacts?.phone || '', deal.ai_suggested_reply)}
