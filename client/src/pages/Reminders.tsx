@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, Clock, Trash2, Send, Edit2, CheckCircle2, Calendar, Plus, MessageCircle } from 'lucide-react'
 import { useReminders, Reminder } from '../hooks/useReminders'
 import AddReminderModal from '../components/AddReminderModal'
+import { useToast } from '../context/ToastContext'
 
 const ReminderCard = ({ r, onDelete, onSend }: { r: Reminder, onDelete: (id: string) => void, onSend: (r: Reminder) => void }) => (
   <motion.div 
@@ -56,6 +57,7 @@ const Reminders: React.FC = () => {
   const [activeTab, setActiveTab] = useState('upcoming')
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const { reminders, loading, deleteReminder, refresh } = useReminders()
+  const { toast } = useToast()
 
   const upcoming = reminders.filter(r => r.status === 'pending')
   const sent = reminders.filter(r => r.status === 'sent')
@@ -119,7 +121,7 @@ const Reminders: React.FC = () => {
             >
               {upcoming.length > 0 ? (
                 upcoming.map((r) => (
-                  <ReminderCard key={r.id} r={r} onDelete={deleteReminder} onSend={() => alert('Sending...')} />
+                  <ReminderCard key={r.id} r={r} onDelete={deleteReminder} onSend={() => toast('Sending reminder...', 'info')} />
                 ))
               ) : (
                 <div className="py-20 text-center flex flex-col items-center">

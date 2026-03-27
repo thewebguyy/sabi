@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Clock, Calendar, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
+import { useToast } from '../context/ToastContext'
 
 interface AddReminderModalProps {
   isOpen: boolean;
@@ -16,10 +17,17 @@ const AddReminderModal: React.FC<AddReminderModalProps> = ({ isOpen, onClose, on
   const [triggerTime, setTriggerTime] = useState('')
   const [loading, setLoading] = useState(false)
   const { deals } = useStore()
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
+    if (!dealId) {
+      toast('Please link this reminder to a deal.', 'error')
+      setLoading(false)
+      return
+    }
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -38,13 +46,14 @@ const AddReminderModal: React.FC<AddReminderModalProps> = ({ isOpen, onClose, on
       if (error) throw error
       
       onSuccess?.()
+      toast('Reminder set successfully!', 'success')
       onClose()
       setMessage('')
       setDealId('')
       setTriggerTime('')
     } catch (err) {
       console.error(err)
-      alert('Failed to add reminder')
+      toast('Failed to save reminder.', 'error')
     } finally {
       setLoading(false)
     }

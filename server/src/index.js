@@ -26,12 +26,17 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 // Middleware
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:5173'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) 
+  : ['http://localhost:5173'];
+
 app.use(cors({
   origin: (origin, callback) => {
+    // Treat no origin (like mobile apps/curl) as allowed if intended, or restrict as needed
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`CORS blocked for origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   }
@@ -69,6 +74,12 @@ const aiRateLimiter = rateLimit({
   message: { error: 'Too many AI requests' }
 });
 
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // Strict for OTP
+  message: { error: 'Too many authentication attempts' }
+});
+
 // --- ROUTES ---
 
 // Health Check
@@ -94,7 +105,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
   }
 });
 
-app.post('/api/auth/verify-otp', async (req, res) => {
+app.post('/api/auth/verify-otp', authRateLimiter, async (req, res) => {
   const { phone, otp } = req.body;
   
   try {
@@ -140,22 +151,29 @@ app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res)
 
 // 2. WhatsApp Webhook (Fixed User Resolution & Security)
 app.post('/api/webhook/whatsapp', async (req, res) => {
-  const { body, from, to } = req.body;
+  // 1. HARDENED: Mandatory signature check if secret exists
   const signature = req.headers['x-hub-signature-256'];
   const secret = process.env.WEBHOOK_SECRET;
 
-  if (secret && signature) {
-    const crypto = await import('crypto');
+  if (secret) {
+    if (!signature) return res.status(401).json({ error: 'Missing signature' });
     const hmac = crypto.createHmac('sha256', secret);
     const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
-    if (signature !== digest) {
-        return res.status(401).json({ error: 'Invalid signature' });
-    }
+    if (signature !== digest) return res.status(401).json({ error: 'Invalid signature' });
+  } else if (process.env.NODE_ENV === 'production') {
+    console.error('CRITICAL: WEBHOOK_SECRET not set!');
+    return res.status(500).json({ error: 'Config error' });
   }
   
+  const { body, from, to, messageId } = req.body; 
   if (!body || !from || !to) return res.status(400).json({ error: 'Missing fields' });
 
   try {
+    // 2. IDEMPOTENCY check
+    if (messageId) {
+      const { data: existing } = await supabase.from('chat_messages').select('id').eq('whatsapp_id', messageId).single();
+      if (existing) return res.json({ success: true, duplicated: true });
+    }
     // Resolve which Sabi user (vendor) this belongs to based on the destination number
     const { data: user, error: userError } = await supabase.from('users').select('id').eq('phone', to).single();
     if (userError || !user) {
@@ -187,7 +205,15 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       dealId = deal?.id;
     }
 
-    await supabase.from('chat_messages').insert([{ user_id: userId, contact_id: contact.id, deal_id: dealId, body, direction: 'inbound', timestamp: new Date() }]);
+    await supabase.from('chat_messages').insert([{ 
+      user_id: userId, 
+      contact_id: contact.id, 
+      deal_id: dealId, 
+      body, 
+      direction: 'inbound', 
+      timestamp: new Date(),
+      whatsapp_id: messageId // Store for idempotency
+    }]);
     res.json({ success: true });
   } catch (error) {
     console.error('Webhook processing error:', error);

@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { useAnalytics } from '../hooks/useAnalytics'
 import { useStore, Deal } from '../store/useStore'
+import { useMemo } from 'react'
 
 const AnalyticsCard = ({ icon, label, value, trend, trendColor }: any) => (
   <div className="bg-surface p-5 rounded-3xl border border-white/5 space-y-4 shadow-xl">
@@ -32,48 +33,53 @@ const Analytics: React.FC = () => {
   const { deals, loading: dealsLoading } = useStore()
 
   // Derived status data for chart
-  const statusData = [
+  const statusData = useMemo(() => [
     { name: 'Inquiry', value: deals.filter((d: Deal) => d.status === 'inquiry').length, color: '#facc15' },
     { name: 'Pending', value: deals.filter((d: Deal) => d.status === 'pending').length, color: '#25D366' },
     { name: 'Paid', value: deals.filter((d: Deal) => d.status === 'paid').length, color: '#4CAF50' },
     { name: 'Ghosted', value: deals.filter((d: Deal) => d.status === 'ghosted').length, color: '#FF6B35' },
-  ]
+  ], [deals]);
 
   // Derived top customers
-  const customerRevenue: Record<string, { name: string, amount: number }> = {}
-  deals.filter((d: Deal) => d.status === 'paid').forEach((d: Deal) => {
-    const name = d.contacts?.name || 'Unknown'
-    if (!customerRevenue[name]) customerRevenue[name] = { name, amount: 0 }
-    customerRevenue[name].amount += (d.amount || 0)
-  })
-  
-  const topCustomers = Object.values(customerRevenue)
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 5)
+  const topCustomers = useMemo(() => {
+    const customerRevenue: Record<string, { name: string, amount: number }> = {}
+    deals.filter((d: Deal) => d.status === 'paid').forEach((d: Deal) => {
+      const name = d.contacts?.name || 'Unknown'
+      if (!customerRevenue[name]) customerRevenue[name] = { name, amount: 0 }
+      customerRevenue[name].amount += (d.amount || 0)
+    })
+    
+    return Object.values(customerRevenue)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+  }, [deals]);
 
   // Revenue data (Grouped by week)
-  const getWeek = (date: Date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-    const yearStart = new Date(d.getFullYear(), 0, 1);
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  };
+  const revenueData = useMemo(() => {
+    const getWeek = (date: Date) => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+      const yearStart = new Date(d.getFullYear(), 0, 1);
+      return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    };
 
-  const weeklyRevenueMap: Record<string, number> = {};
-  deals.filter((d: Deal) => d.status === 'paid').forEach((d: Deal) => {
-    const week = `W${getWeek(new Date(d.created_at))}`;
-    weeklyRevenueMap[week] = (weeklyRevenueMap[week] || 0) + (d.amount || 0);
-  });
+    const weeklyRevenueMap: Record<string, number> = {};
+    deals.filter((d: Deal) => d.status === 'paid').forEach((d: Deal) => {
+      const week = `W${getWeek(new Date(d.created_at))}`;
+      weeklyRevenueMap[week] = (weeklyRevenueMap[week] || 0) + (d.amount || 0);
+    });
 
-  const revenueData = Object.entries(weeklyRevenueMap).map(([week, amount]) => ({ week, amount })).sort((a, b) => a.week.localeCompare(b.week));
-  
-  // Ensure we have at least some points for the chart
-  if (revenueData.length === 1) {
-    revenueData.unshift({ week: 'Pre', amount: 0 });
-  } else if (revenueData.length === 0) {
-    revenueData.push({ week: 'None', amount: 0 });
-  }
+    const data = Object.entries(weeklyRevenueMap).map(([week, amount]) => ({ week, amount })).sort((a, b) => a.week.localeCompare(b.week));
+    
+    // Ensure we have at least some points for the chart
+    if (data.length === 1) {
+      data.unshift({ week: 'Pre', amount: 0 });
+    } else if (data.length === 0) {
+      data.push({ week: 'None', amount: 0 });
+    }
+    return data;
+  }, [deals]);
 
   if (summaryLoading || dealsLoading) {
     return (
