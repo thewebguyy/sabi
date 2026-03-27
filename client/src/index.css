@@ -16,11 +16,6 @@ body {
 h1, h2, h3, h4, .font-syne {
   @apply font-display;
 }
-
-.font-mono {
-  @apply font-mono;
-}
-
 /* Custom Scrollbar for Dark Theme */
 ::-webkit-scrollbar {
   width: 8px;
