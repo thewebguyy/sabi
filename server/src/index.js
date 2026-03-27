@@ -188,33 +188,20 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       contact = nc;
     }
 
-    const aiResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "system", content: 'Extract deal info from chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply }' }, { role: "user", content: body }],
-      response_format: { type: "json_object" }
-    });
-    const aiResult = JSON.parse(aiResponse.choices[0].message.content);
-
-    let dealId = null;
-    if (aiResult.is_deal) {
-      const { data: deal } = await supabase.from('deals').insert([{
-        user_id: userId, contact_id: contact.id, title: aiResult.title || 'Inquiry', amount: aiResult.amount || 0,
-        summary: aiResult.summary, customer_constraint: aiResult.customer_constraint,
-        ai_suggested_reply: aiResult.ai_reply, status: 'pending'
-      }]).select().single();
-      dealId = deal?.id;
-    }
-
+    // THE PIVOT: We no longer call OpenAI synchronously here.
+    // Instead, we just insert the message. A Supabase Edge Function 
+    // will be triggered on this INSERT to handle AI deal extraction asynchronously.
+    
     await supabase.from('chat_messages').insert([{ 
       user_id: userId, 
       contact_id: contact.id, 
-      deal_id: dealId, 
       body, 
       direction: 'inbound', 
       timestamp: new Date(),
-      whatsapp_id: messageId // Store for idempotency
+      whatsapp_id: messageId 
     }]);
-    res.json({ success: true });
+
+    res.json({ success: true, message: 'Message queued for analysis' });
   } catch (error) {
     console.error('Webhook processing error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });
