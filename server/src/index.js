@@ -149,63 +149,92 @@ app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res)
   }
 });
 
-// 2. WhatsApp Webhook (Fixed User Resolution & Security)
+// 2. WhatsApp Webhook (Handshake & Payload Parsing)
+
+// GET: Verification for Meta Dashboard
+app.get('/api/webhook/whatsapp', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    console.log('--- SABI WEBHOOK VERIFIED ---');
+    return res.status(200).send(challenge);
+  }
+  res.sendStatus(403);
+});
+
+// POST: Real-time Interactions
 app.post('/api/webhook/whatsapp', async (req, res) => {
-  // 1. HARDENED: Mandatory signature check if secret exists
-  const signature = req.headers['x-hub-signature-256'];
-  const secret = process.env.WEBHOOK_SECRET;
+  const body = req.body;
 
-  if (secret) {
+  // 1. HARDENED: Signature check for production security
+  if (process.env.WHATSAPP_WEBHOOK_SECRET) {
+    const signature = req.headers['x-hub-signature-256'];
     if (!signature) return res.status(401).json({ error: 'Missing signature' });
-    const hmac = crypto.createHmac('sha256', secret);
-    const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
-    if (signature !== digest) return res.status(401).json({ error: 'Invalid signature' });
-  } else if (process.env.NODE_ENV === 'production') {
-    console.error('CRITICAL: WEBHOOK_SECRET not set!');
-    return res.status(500).json({ error: 'Config error' });
+    const hmac = crypto.createHmac('sha256', process.env.WHATSAPP_WEBHOOK_SECRET)
+                       .update(JSON.stringify(body))
+                       .digest('hex');
+    if (signature !== `sha256=${hmac}`) return res.status(401).json({ error: 'Invalid signature' });
   }
-  
-  const { body, from, to, messageId } = req.body; 
-  if (!body || !from || !to) return res.status(400).json({ error: 'Missing fields' });
 
-  try {
-    // 2. IDEMPOTENCY check
-    if (messageId) {
-      const { data: existing } = await supabase.from('chat_messages').select('id').eq('whatsapp_id', messageId).single();
-      if (existing) return res.json({ success: true, duplicated: true });
+  // 2. Parse Meta's nested payload
+  if (body.object) {
+    if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
+      const message = body.entry[0].changes[0].value.messages[0];
+      const metadata = body.entry[0].changes[0].value.metadata;
+      
+      const from = message.from;        // User's number
+      const to = metadata.display_phone_number; // Sabi's number (vendor)
+      const text = message.text?.body;
+      const messageId = message.id;
+
+      if (!text) return res.sendStatus(200); // Handle non-text later
+
+      try {
+        // IDEMPOTENCY check
+        const { data: existing } = await supabase.from('chat_messages').select('id').eq('whatsapp_id', messageId).single();
+        if (existing) return res.sendStatus(200);
+
+        // Resolve vendor
+        const { data: user } = await supabase.from('users').select('id').eq('phone', to).single();
+        if (!user) {
+          console.error('[WHATSAPP] Unknown destination vendor:', to);
+          return res.sendStatus(200);
+        }
+
+        const userId = user.id;
+
+        // Ensure contact exists
+        let { data: contact } = await supabase.from('contacts').select('id').eq('phone', from).eq('user_id', userId).single();
+        if (!contact) {
+          const { data: nc } = await supabase.from('contacts').insert([{ 
+            user_id: userId, 
+            phone: from, 
+            name: from, 
+            last_seen: new Date() 
+          }]).select().single();
+          contact = nc;
+        }
+
+        // Insert message for Edge Function processing
+        await supabase.from('chat_messages').insert([{ 
+          user_id: userId, 
+          contact_id: contact.id, 
+          body: text, 
+          direction: 'inbound', 
+          timestamp: new Date(),
+          whatsapp_id: messageId 
+        }]);
+
+        console.log(`[WHATSAPP] Received from ${from} for Sabi user ${userId}`);
+      } catch (err) {
+        console.error('[WHATSAPP WEBHOOK ERROR]:', err.message);
+      }
     }
-    // Resolve which Sabi user (vendor) this belongs to based on the destination number
-    const { data: user, error: userError } = await supabase.from('users').select('id').eq('phone', to).single();
-    if (userError || !user) {
-        console.error('Vendor not found for number:', to);
-        return res.status(404).json({ error: 'Vendor not found' });
-    }
-    const userId = user.id;
-
-    let { data: contact } = await supabase.from('contacts').select('id').eq('phone', from).eq('user_id', userId).single();
-    if (!contact) {
-      const { data: nc } = await supabase.from('contacts').insert([{ user_id: userId, phone: from, name: from, last_seen: new Date() }]).select().single();
-      contact = nc;
-    }
-
-    // THE PIVOT: We no longer call OpenAI synchronously here.
-    // Instead, we just insert the message. A Supabase Edge Function 
-    // will be triggered on this INSERT to handle AI deal extraction asynchronously.
-    
-    await supabase.from('chat_messages').insert([{ 
-      user_id: userId, 
-      contact_id: contact.id, 
-      body, 
-      direction: 'inbound', 
-      timestamp: new Date(),
-      whatsapp_id: messageId 
-    }]);
-
-    res.json({ success: true, message: 'Message queued for analysis' });
-  } catch (error) {
-    console.error('Webhook processing error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    return res.sendStatus(200);
   }
+  res.sendStatus(404);
 });
 
 // 3. Deals API
