@@ -24,7 +24,8 @@ const Auth: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/send-otp`, { phone });
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      await axios.post(`${apiUrl}/api/auth/send-otp`, { phone });
       setStep('otp');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to send OTP');
@@ -38,7 +39,8 @@ const Auth: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/send-otp`, { phone });
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      await axios.post(`${apiUrl}/api/auth/send-otp`, { phone });
       setStep('otp');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to send OTP');
@@ -52,7 +54,8 @@ const Auth: React.FC = () => {
     setError(null);
     try {
       // 1. Verify OTP with Backend
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/verify-otp`, { phone, otp });
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      await axios.post(`${apiUrl}/api/auth/verify-otp`, { phone, otp });
 
       // 2. Auth with Supabase using fake email bridge
       const fakeEmail = `${phone.replace(/\+/g, '')}@sabi.app`;
