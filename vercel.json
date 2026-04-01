@@ -19,9 +19,8 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/(.*)",
-      "destination": "/client/dist/$1",
-      "check": true
+      "source": "/assets/(.*)",
+      "destination": "/client/dist/assets/$1"
     },
     {
       "source": "/(.*)",
