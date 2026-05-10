@@ -1,173 +1,128 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Building, Phone, Globe, Bell, Wallet, ShieldAlert, ChevronRight, 
-  CheckCircle2, AlertCircle, LogOut, Wallet2, Star, Zap
-} from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Building, Phone, CheckCircle2, AlertCircle, LogOut } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
-const SettingItem = ({ icon, label, value, onClick, color, isToggle, valueChecked }: any) => (
-  <button 
-    onClick={onClick}
-    className="w-full bg-surface-2 p-4 rounded-2xl border border-white/5 flex items-center justify-between active:scale-[0.98] transition-all group"
-  >
-    <div className="flex items-center gap-4">
-      <div className={`w-10 h-10 rounded-2xl bg-surface flex items-center justify-center ${color}`}>
-        {icon}
-      </div>
-      <div className="text-left">
-        <label className="text-[10px] font-bold text-text-muted uppercase block leading-none mb-1">{label}</label>
-        <span className="text-sm font-bold text-text-primary capitalize">{value}</span>
-      </div>
-    </div>
-    {isToggle ? (
-       <div className={`w-10 h-6 rounded-full p-1 transition-all ${valueChecked ? 'bg-accent' : 'bg-white/10'}`}>
-          <div className={`w-4 h-4 bg-white rounded-full transition-transform ${valueChecked ? 'translate-x-4' : 'translate-x-0'}`} />
-       </div>
-    ) : (
-       <ChevronRight size={18} className="text-text-muted group-active:translate-x-1 transition-transform" />
-    )}
-  </button>
-)
+const FOLLOW_UP_OPTIONS = [
+  { label: '24h', value: 24 },
+  { label: '48h', value: 48 },
+  { label: '72h', value: 72 },
+]
 
 const Settings: React.FC = () => {
-  const { user, signOut, updateUserPreferences } = useStore()
-  const [whatsappConnected, setWhatsAppConnected] = useState(true)
+  const { user, signOut, updateUser } = useStore()
+  const [businessName, setBusinessName] = useState(user?.business_name || '')
+  const [savingName, setSavingName] = useState(false)
 
-  const handleToggle = (key: 'summary' | 'ghosting' | 'payments') => {
-    if (!user) return;
-    updateUserPreferences({ [key]: !user.notification_preferences[key] });
+  const handleNameBlur = async () => {
+    if (!businessName.trim() || businessName === user?.business_name) return
+    setSavingName(true)
+    await updateUser({ business_name: businessName.trim() })
+    setSavingName(false)
   }
 
-  const notifications = user?.notification_preferences || {
-    summary: true,
-    ghosting: true,
-    payments: true
+  const handleFollowUpChange = async (hours: number) => {
+    await updateUser({ follow_up_hours: hours })
   }
+
+  const followUpHours = user?.follow_up_hours ?? 48
+  const isConnected = user?.whatsapp_connected ?? false
 
   return (
-    <div className="pb-24 pt-4 space-y-10">
-      <h2 className="text-3xl font-syne font-extrabold mb-8 px-2">Settings</h2>
+    <div className="pb-24 space-y-8">
 
-      {/* Profile Section */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted px-2">Profile</h3>
-        <div className="space-y-3">
-           <SettingItem icon={<Building size={20} />} label="Business Name" value={user?.business_name || 'My Business'} color="text-accent" />
-           <SettingItem icon={<Phone size={20} />} label="WhatsApp Phone" value={user?.phone || '08012345678'} color="text-accent" />
-           <SettingItem icon={<Globe size={20} />} label="Currency" value={user?.currency || 'NGN'} color="text-accent" />
+      {/* Profile */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Profile</h3>
+
+        <div className="bg-surface rounded-3xl border border-white/5 p-5 space-y-5">
+          {/* Business Name — editable */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5">
+              <Building size={12} />
+              Business Name
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full bg-surface-2 rounded-2xl border border-white/5 py-4 px-4 text-text-primary outline-none focus:border-accent/40 transition-all font-body text-sm"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                onBlur={handleNameBlur}
+                placeholder="Your business name"
+              />
+              {savingName && (
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-text-muted">Saving…</span>
+              )}
+            </div>
+          </div>
+
+          {/* WhatsApp Phone — display only */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5">
+              <Phone size={12} />
+              WhatsApp Number
+            </label>
+            <div className="bg-surface-2 rounded-2xl border border-white/5 py-4 px-4 text-text-primary font-mono text-sm">
+              {user?.phone || '—'}
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* WhatsApp Connection */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted px-2">Connection</h3>
-        <div className={`bg-surface p-5 rounded-3xl border ${whatsappConnected ? 'border-accent/20' : 'border-hot/20'} relative overflow-hidden`}>
-           <div className={`absolute top-0 right-0 py-1.5 px-4 text-[10px] font-extrabold uppercase rounded-bl-xl tracking-tight ${whatsappConnected ? 'bg-accent text-primary' : 'bg-hot text-primary'}`}>
-              {whatsappConnected ? 'Connected' : 'Disconnected'}
-           </div>
-           <div className="flex items-center gap-4 mb-6">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${whatsappConnected ? 'bg-accent/10 text-accent' : 'bg-hot/10 text-hot'}`}>
-                 <div className="relative">
-                    <CheckCircle2 size={24} />
-                    {!whatsappConnected && <div className="absolute inset-0 bg-hot rounded-full"></div>}
-                 </div>
-              </div>
-              <div className="pt-2">
-                 <h4 className="font-bold">WhatsApp Business API</h4>
-                 <p className="text-xs text-text-muted">Status: {whatsappConnected ? 'Healthy' : 'Disconnected'}</p>
-              </div>
-           </div>
-           <button 
-             onClick={() => setWhatsAppConnected(!whatsappConnected)}
-             className={`w-full py-4 rounded-xl text-sm font-bold transition-all ${
-               whatsappConnected ? 'bg-surface-2 text-text-muted hover:text-hot active:bg-hot/5' : 'bg-accent text-primary font-extrabold'
-             }`}
-           >
-             {whatsappConnected ? 'Disconnect Account' : 'Connect WhatsApp Now'}
-           </button>
+      {/* WhatsApp Connection Status */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">WhatsApp Connection</h3>
+        <div className={`bg-surface rounded-3xl border p-5 flex items-center gap-4 ${isConnected ? 'border-accent/20' : 'border-hot/20'}`}>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${isConnected ? 'bg-accent/10 text-accent' : 'bg-hot/10 text-hot'}`}>
+            {isConnected ? <CheckCircle2 size={22} /> : <AlertCircle size={22} />}
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-sm">{isConnected ? 'Connected' : 'Not Connected'}</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {isConnected
+                ? 'WhatsApp Business API is active'
+                : 'Connect via your Meta Business Manager'
+              }
+            </p>
+          </div>
+          <div className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${isConnected ? 'bg-accent text-primary' : 'bg-hot text-primary'}`}>
+            {isConnected ? 'Active' : 'Offline'}
+          </div>
         </div>
       </section>
 
-      {/* Notifications */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted px-2">Notifications</h3>
-        <div className="space-y-2">
-           <SettingItem 
-             icon={<Bell size={20} />} 
-             label="Morning Summary" 
-             value="Daily at 8:00 AM" 
-             isToggle 
-             valueChecked={notifications.summary}
-             onClick={() => handleToggle('summary')}
-             color="text-accent" 
-           />
-           <SettingItem 
-             icon={<AlertCircle size={20} />} 
-             label="Ghosting Alerts" 
-             value="After 18 hours" 
-             isToggle 
-             valueChecked={notifications.ghosting}
-             onClick={() => handleToggle('ghosting')}
-             color="text-accent" 
-           />
-           <SettingItem 
-             icon={<Wallet2 size={20} />} 
-             label="Payment Reminders" 
-             value="When proof received" 
-             isToggle 
-             valueChecked={notifications.payments}
-             onClick={() => handleToggle('payments')}
-             color="text-accent" 
-           />
+      {/* Follow-up Timing */}
+      <section className="space-y-3">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Follow-up Timing</h3>
+        <p className="text-xs text-text-muted px-1">Get notified when a deal hasn't had contact in this long.</p>
+        <div className="bg-surface-2 p-1.5 rounded-2xl flex gap-1">
+          {FOLLOW_UP_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => handleFollowUpChange(opt.value)}
+              className={`flex-1 py-3 rounded-xl text-sm font-extrabold transition-all ${
+                followUpHours === opt.value
+                  ? 'bg-accent text-primary shadow-[0_4px_15px_rgba(37,211,102,0.3)]'
+                  : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </section>
 
-      {/* Plan & Billing */}
-      <section className="space-y-4">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted px-2">Plan & Billing</h3>
-        <div className="bg-gradient-to-br from-surface to-surface-2 p-6 rounded-[32px] border border-white/5 shadow-2xl relative overflow-hidden transition-all group active:scale-[0.98]">
-           <div className="absolute -top-10 -right-10 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
-           <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2">
-                 <h4 className="text-2xl font-syne font-extrabold">Grind Plan</h4>
-                 <div className="bg-gold text-primary text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Star size={10} fill="currentColor" /> POPULAR
-                 </div>
-              </div>
-              <p className="text-sm text-text-muted mb-6">Your next billing is ₦4,900 on {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</p>
-              <div className="flex gap-4">
-                 <Link to="/pricing" className="flex-1 bg-accent/10 border border-accent/20 text-accent font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
-                    <Zap size={16} /> Upgrade
-                 </Link>
-                 <button className="flex-1 bg-surface-2 text-text-muted font-bold py-3 rounded-xl text-sm border border-white/5">
-                    View Billing
-                 </button>
-              </div>
-           </div>
-        </div>
-      </section>
-
-      {/* Danger Zone */}
-      <section className="space-y-4 pb-10">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted px-2">Logout</h3>
-        <div className="space-y-4">
-           <button 
-             onClick={() => signOut()}
-             className="w-full bg-surface-2/50 p-4 rounded-2xl border border-white/5 flex items-center justify-between group active:bg-hot/5 active:border-hot/20 transition-all font-body"
-           >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-2xl bg-surface flex items-center justify-center text-text-muted group-active:text-hot transition-colors">
-                  <LogOut size={20} />
-                </div>
-                <span className="font-bold text-text-muted group-active:text-hot transition-colors font-body">Sign Out</span>
-              </div>
-           </button>
-           <button className="w-full text-center py-4 text-xs font-bold text-hot/50 uppercase tracking-widest hover:text-hot transition-colors opacity-40">
-              Delete Account
-           </button>
-        </div>
+      {/* Sign Out */}
+      <section className="pt-4">
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => signOut()}
+          className="w-full bg-surface-2 border border-white/5 py-5 rounded-2xl flex items-center justify-center gap-3 text-sm font-bold text-hot/60 hover:text-hot hover:border-hot/20 active:bg-hot/5 transition-all"
+        >
+          <LogOut size={18} />
+          Sign Out
+        </motion.button>
       </section>
     </div>
   )

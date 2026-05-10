@@ -7,350 +7,568 @@ import OpenAI from 'openai';
 import rateLimit from 'express-rate-limit';
 import axios from 'axios';
 import crypto from 'crypto';
-import { sendOTP, sendSMS } from './utils/notifications.js';
+import { sendOTP, sendWhatsAppText } from './utils/notifications.js';
 
 dotenv.config();
-
-// Environment Validation
-const requiredEnv = ['VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENAI_API_KEY'];
-const validateEnv = () => {
-  const missing = requiredEnv.filter(key => !process.env[key]);
-  if (missing.length > 0) {
-    console.error(`CRITICAL: Missing environment variables: ${missing.join(', ')}`);
-    process.exit(1);
-  }
-};
-validateEnv();
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Middleware
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) 
-  : ['http://localhost:5173'];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // Treat no origin (like mobile apps/curl) as allowed if intended, or restrict as needed
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked for origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  }
-}));
-app.use(express.json());
-app.use(morgan('dev'));
-
-// Supabase & OpenAI Setup
+// ─── SUPABASE & OPENAI ───────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// ─── MIDDLEWARE ──────────────────────────────────────────────────────────────
+const origins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
 
-// Authentication Middleware
-const authMiddleware = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'No authorization header' });
+app.use(cors({ origin: (o, cb) => (!o || origins.includes(o) ? cb(null, true) : cb(new Error('CORS'))) }));
+app.use(express.json());
+app.use(morgan('dev'));
 
-  const token = authHeader.split(' ')[1];
+// ─── RATE LIMITERS ───────────────────────────────────────────────────────────
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+const aiLimiter   = rateLimit({ windowMs: 15 * 60 * 1000, max: 60 });
+
+// ─── AUTH MIDDLEWARE ─────────────────────────────────────────────────────────
+const auth = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
   const { data: { user }, error } = await supabase.auth.getUser(token);
-
-  if (error || !user) return res.status(401).json({ error: 'Invalid or expired token' });
-
+  if (error || !user) return res.status(401).json({ error: 'Invalid token' });
   req.user = user;
   next();
 };
 
-const aiRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50,
-  message: { error: 'Too many AI requests' }
-});
+// Internal job secret guard
+const jobAuth = (req, res, next) => {
+  const secret = req.headers['x-internal-secret'];
+  if (secret !== process.env.INTERNAL_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  next();
+};
 
-const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // Strict for OTP
-  message: { error: 'Too many authentication attempts' }
-});
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const sendWhatsApp = async (to, message) => {
+  const token   = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  if (!token || !phoneId) { console.warn('[WA] No creds'); return; }
+  await axios.post(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: to.replace(/\D/g, ''),
+    type: 'text',
+    text: { body: message }
+  }, { headers: { Authorization: `Bearer ${token}` } });
+};
 
-// --- ROUTES ---
+// ─── HEALTH ──────────────────────────────────────────────────────────────────
+app.get('/api/health', (_, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+app.get('/health',     (_, res) => res.json({ status: 'ok' }));
 
-// Health Check
-app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok', uptime: process.uptime() }));
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok', uptime: process.uptime() }));
+// ════════════════════════════════════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════════════════════════════════════
 
-// 0. Auth
-app.post('/api/auth/send-otp', async (req, res) => {
+// POST /api/auth/send-otp
+app.post('/api/auth/send-otp', authLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Phone required' });
   try {
-    const otp = await sendOTP(phone);
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    await supabase.from('otp_codes').delete().eq('phone', phone);
+    await supabase.from('otp_codes').delete().lt('expires_at', new Date().toISOString());
+    await supabase.from('otp_codes').insert([{ phone, code: otp, expires_at: expiresAt }]);
+
+    // Check if user exists
+    const { data: existingUser } = await supabase.from('users').select('id').eq('phone', phone).maybeSingle();
     
-    // Store in DB for persistence across instances
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
-    await supabase.from('otp_codes').delete().eq('phone', phone); // Clear old one for this phone
-    await supabase.from('otp_codes').delete().lt('expires_at', new Date().toISOString()); // Cleanup orphaned expired codes
-    await supabase.from('otp_codes').insert([{ phone, code: otp.toString(), expires_at: expiresAt }]);
-    
-    res.json({ success: true, message: 'OTP sent' });
-  } catch (error) {
-    console.error('OTP error:', error);
+    await sendOTP(phone, otp);
+    res.json({ success: true, isNewUser: !existingUser });
+  } catch (err) {
+    console.error('[OTP send]', err.message);
     res.status(500).json({ error: 'Failed to send OTP' });
   }
 });
 
-app.post('/api/auth/verify-otp', authRateLimiter, async (req, res) => {
+// POST /api/auth/verify-otp
+app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
   const { phone, otp } = req.body;
-  
+  if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP required' });
   try {
-    const { data: stored, error } = await supabase
-      .from('otp_codes')
-      .select('*')
-      .eq('phone', phone)
-      .eq('code', otp)
-      .gt('expires_at', new Date().toISOString())
-      .single();
+    const { data: stored } = await supabase
+      .from('otp_codes').select('*').eq('phone', phone).eq('code', otp)
+      .gt('expires_at', new Date().toISOString()).maybeSingle();
 
-    if (stored) {
-      await supabase.from('otp_codes').delete().eq('phone', phone);
-      res.json({ success: true });
-    } else {
-      res.status(400).json({ error: 'Invalid or expired OTP' });
+    if (!stored) return res.status(400).json({ error: 'Invalid or expired code' });
+    await supabase.from('otp_codes').delete().eq('phone', phone);
+
+    // Check if user exists
+    const { data: existing } = await supabase.from('users').select('id').eq('phone', phone).maybeSingle();
+
+    if (existing) {
+      // Sign them in via admin — create a magic link token
+      const { data: linkData, error } = await supabase.auth.admin.generateLink({
+        type: 'magiclink', email: `${phone.replace(/\D/g, '')}@sabi.app`
+      });
+      if (error) throw error;
+      // Exchange for session
+      const { data: session } = await supabase.auth.verifyOtp({
+        token_hash: linkData.properties?.hashed_token, type: 'email'
+      });
+      return res.json({ success: true, isNewUser: false, token: session?.session?.access_token });
     }
+
+    // New user: create auth user
+    const email = `${phone.replace(/\D/g, '')}@sabi.app`;
+    const { data: newAuthUser, error: authErr } = await supabase.auth.admin.createUser({
+      email, email_confirm: true, phone, phone_confirm: true,
+      user_metadata: { phone }
+    });
+    if (authErr) throw authErr;
+
+    // Create user profile
+    await supabase.from('users').insert([{
+      id: newAuthUser.user.id, phone, has_seeded: false,
+      follow_up_hours: 48,
+      notification_preferences: { summary: true, ghosting: true, payments: true }
+    }]);
+
+    const { data: adminSession } = await supabase.auth.admin.generateLink({
+      type: 'magiclink', email
+    });
+    const { data: sess } = await supabase.auth.verifyOtp({
+      token_hash: adminSession?.properties?.hashed_token, type: 'email'
+    });
+
+    res.json({ success: true, isNewUser: true, token: sess?.session?.access_token });
   } catch (err) {
+    console.error('[OTP verify]', err.message);
     res.status(500).json({ error: 'Verification failed' });
   }
 });
 
-// 1. AI Extraction
-app.post('/api/ai/extract-deal', authMiddleware, aiRateLimiter, async (req, res) => {
-  const { chatText } = req.body;
-  if (!chatText) return res.status(400).json({ error: 'No text' });
-
+// POST /api/auth/setup-profile  (called after business name entered)
+app.post('/api/auth/setup-profile', async (req, res) => {
+  const { phone, businessName } = req.body;
+  if (!phone || !businessName) return res.status(400).json({ error: 'Missing fields' });
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: 'Analyze chat. Return JSON: { is_deal, title, amount, summary, customer_constraint, ai_reply, intent, phone_number }' },
-        { role: "user", content: chatText }
-      ],
-      response_format: { type: "json_object" }
+    const { data: user } = await supabase.from('users').select('id').eq('phone', phone).single();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    await supabase.from('users').update({ business_name: businessName }).eq('id', user.id);
+
+    const email = `${phone.replace(/\D/g, '')}@sabi.app`;
+    const { data: linkData } = await supabase.auth.admin.generateLink({ type: 'magiclink', email });
+    const { data: sess } = await supabase.auth.verifyOtp({
+      token_hash: linkData?.properties?.hashed_token, type: 'email'
     });
-    res.json(JSON.parse(response.choices[0].message.content));
-  } catch (error) {
-    console.error('AI Error:', error);
-    res.status(500).json({ error: 'AI analysis failed' });
+
+    res.json({ success: true, token: sess?.session?.access_token });
+  } catch (err) {
+    console.error('[setup-profile]', err.message);
+    res.status(500).json({ error: 'Profile setup failed' });
   }
 });
 
-// 2. WhatsApp Webhook (Handshake & Payload Parsing)
+// ════════════════════════════════════════════════════════════════════════════
+//  DEALS
+// ════════════════════════════════════════════════════════════════════════════
 
-// GET: Verification for Meta Dashboard
+// GET /api/deals
+app.get('/api/deals', auth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('deals').select('*, contacts(*)')
+    .eq('user_id', req.user.id)
+    .neq('status', 'paid')
+    .order('last_contact_time', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/deals
+app.post('/api/deals', auth, async (req, res) => {
+  const { contactInfo, title, amount } = req.body;
+  if (!contactInfo || !title) return res.status(400).json({ error: 'contactInfo and title required' });
+  const userId = req.user.id;
+  try {
+    const isPhone = /^\+?[0-9\s]{8,15}$/.test(contactInfo.trim());
+    const phoneVal = isPhone ? contactInfo.replace(/\s/g, '') : `+000${Date.now()}`;
+
+    let { data: contact } = await supabase
+      .from('contacts').select('id')
+      .eq('user_id', userId)
+      .or(`phone.eq.${contactInfo.trim()},name.ilike.${contactInfo.trim()}`)
+      .maybeSingle();
+
+    if (!contact) {
+      const { data: nc } = await supabase.from('contacts').insert([{
+        user_id: userId, name: contactInfo.trim(), phone: phoneVal, last_seen: new Date()
+      }]).select().single();
+      contact = nc;
+    }
+
+    const { data: deal, error: dErr } = await supabase.from('deals').insert([{
+      user_id: userId, contact_id: contact.id, title, amount: parseFloat(amount) || 0,
+      status: 'inquiry', last_contact_time: new Date().toISOString()
+    }]).select('*, contacts(*)').single();
+
+    if (dErr) throw dErr;
+    res.status(201).json(deal);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/deals/:id
+app.patch('/api/deals/:id', auth, async (req, res) => {
+  const { id } = req.params;
+  const updates = { ...req.body, updated_at: new Date().toISOString() };
+  if (updates.status === 'paid') updates.last_contact_time = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('deals').update(updates).eq('id', id).eq('user_id', req.user.id)
+    .select('*, contacts(*)').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/deals/:id/follow-up  — generate message + optionally send
+app.post('/api/deals/:id/follow-up', auth, aiLimiter, async (req, res) => {
+  const { id } = req.params;
+  const { send = false, message: customMsg } = req.body;
+
+  const { data: deal } = await supabase
+    .from('deals').select('*, contacts(*)').eq('id', id).single();
+  if (!deal) return res.status(404).json({ error: 'Deal not found' });
+
+  let message = customMsg;
+
+  if (!message) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a helpful Nigerian business assistant. Generate a natural, friendly follow-up WhatsApp message for a vendor to send to a customer. Be concise (2-3 sentences max), warm, and professional. Use "Hi [Name]" to open. Do NOT use markdown.`
+          },
+          {
+            role: 'user',
+            content: `Vendor's business: ${deal.user_id}\nCustomer name: ${deal.contacts?.name}\nProduct/deal: ${deal.title}\nAmount: ₦${deal.amount || '?'}\nDeal summary: ${deal.summary || 'No notes'}\nStatus: ${deal.status}`
+          }
+        ],
+        max_tokens: 150,
+        temperature: 0.7
+      }, { signal: controller.signal });
+
+      clearTimeout(timeout);
+      message = completion.choices[0].message.content.trim();
+    } catch (err) {
+      console.error('[AI follow-up gen]', err.message);
+      const name = deal.contacts?.name?.split(' ')[0] || 'there';
+      message = `Hi ${name}! Just checking in on the ${deal.title}. Are you still interested? Let me know 😊`;
+    }
+  }
+
+  if (send && deal.contacts?.phone) {
+    try {
+      await sendWhatsApp(deal.contacts.phone, message);
+      await supabase.from('deals').update({
+        last_contact_time: new Date().toISOString(), updated_at: new Date().toISOString()
+      }).eq('id', id);
+    } catch (err) {
+      console.error('[WA send]', err.message);
+    }
+  }
+
+  res.json({ message, sent: send });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  REVENUE
+// ════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/revenue', auth, async (req, res) => {
+  const { data: paid } = await supabase
+    .from('deals').select('amount, updated_at, title, contacts(name)')
+    .eq('user_id', req.user.id).eq('status', 'paid')
+    .order('updated_at', { ascending: false });
+
+  const now = new Date();
+  const wStart = new Date(now); wStart.setDate(now.getDate() - now.getDay()); wStart.setHours(0,0,0,0);
+  const wLast  = new Date(wStart); wLast.setDate(wStart.getDate() - 7);
+  const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const todayStart = new Date(now); todayStart.setHours(0,0,0,0);
+
+  const sum = (arr) => arr.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const filter = (arr, from, to) => arr.filter(d => { const t = new Date(d.updated_at); return t >= from && (!to || t < to); });
+
+  const thisWeek  = filter(paid, wStart);
+  const lastWeek  = filter(paid, wLast, wStart);
+  const thisMonth = filter(paid, mStart);
+  const today     = filter(paid, todayStart);
+
+  const weekTotal = sum(thisWeek), lastWeekTotal = sum(lastWeek);
+  const weekPct = lastWeekTotal ? Math.round(((weekTotal - lastWeekTotal) / lastWeekTotal) * 100) : null;
+
+  res.json({
+    today: sum(today), thisWeek: weekTotal, lastWeek: lastWeekTotal,
+    weekPct, thisMonth: sum(thisMonth),
+    recent: (paid || []).slice(0, 20)
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  WHATSAPP WEBHOOK
+// ════════════════════════════════════════════════════════════════════════════
+
 app.get('/api/webhook/whatsapp', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-
-  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-    console.log('--- SABI WEBHOOK VERIFIED ---');
-    return res.status(200).send(challenge);
+  if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === process.env.WHATSAPP_VERIFY_TOKEN) {
+    return res.status(200).send(req.query['hub.challenge']);
   }
   res.sendStatus(403);
 });
 
-// POST: Real-time Interactions
 app.post('/api/webhook/whatsapp', async (req, res) => {
-  const body = req.body;
-
-  // 1. HARDENED: Signature check for production security
+  // HMAC signature check
   if (process.env.WHATSAPP_WEBHOOK_SECRET) {
-    const signature = req.headers['x-hub-signature-256'];
-    if (!signature) return res.status(401).json({ error: 'Missing signature' });
-    const hmac = crypto.createHmac('sha256', process.env.WHATSAPP_WEBHOOK_SECRET)
-                       .update(JSON.stringify(body))
-                       .digest('hex');
-    if (signature !== `sha256=${hmac}`) return res.status(401).json({ error: 'Invalid signature' });
+    const sig = req.headers['x-hub-signature-256'];
+    const hmac = `sha256=${crypto.createHmac('sha256', process.env.WHATSAPP_WEBHOOK_SECRET).update(JSON.stringify(req.body)).digest('hex')}`;
+    if (sig !== hmac) return res.status(401).json({ error: 'Bad signature' });
   }
 
-  // 2. Parse Meta's nested payload
-  if (body.object) {
-    if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
-      const message = body.entry[0].changes[0].value.messages[0];
-      const metadata = body.entry[0].changes[0].value.metadata;
-      
-      const from = message.from;        // User's number
-      const to = metadata.display_phone_number; // Sabi's number (vendor)
-      const text = message.text?.body;
-      const messageId = message.id;
+  res.sendStatus(200); // Respond immediately
 
-      if (!text) return res.sendStatus(200); // Handle non-text later
+  const body = req.body;
+  if (!body?.entry?.[0]?.changes?.[0]?.value?.messages) return;
 
+  const msg      = body.entry[0].changes[0].value.messages[0];
+  const metadata = body.entry[0].changes[0].value.metadata;
+  const from     = msg.from;
+  const to       = metadata.display_phone_number;
+  const text     = msg.text?.body;
+  const msgId    = msg.id;
+
+  if (!text) return;
+
+  try {
+    // Idempotency
+    const { data: dup } = await supabase.from('chat_messages').select('id').eq('whatsapp_id', msgId).maybeSingle();
+    if (dup) return;
+
+    // Check if this is a SEND/SKIP reply TO Sabi system
+    const sabiSystemPhone = process.env.SABI_SYSTEM_PHONE;
+    if (sabiSystemPhone && to.replace(/\D/g,'') === sabiSystemPhone.replace(/\D/g,'')) {
+      await handleVendorReply(from, text.trim().toUpperCase());
+      return;
+    }
+
+    // Normal inbound: resolve vendor by "to" number
+    const { data: vendor } = await supabase.from('users').select('id').eq('phone', to).maybeSingle();
+    if (!vendor) return;
+
+    const userId = vendor.id;
+
+    // Resolve/create contact
+    let { data: contact } = await supabase.from('contacts').select('id').eq('phone', from).eq('user_id', userId).maybeSingle();
+    if (!contact) {
+      const { data: nc } = await supabase.from('contacts').insert([{
+        user_id: userId, phone: from, name: from, last_seen: new Date()
+      }]).select().single();
+      contact = nc;
+    }
+
+    // Store message
+    const { data: chatMsg } = await supabase.from('chat_messages').insert([{
+      user_id: userId, contact_id: contact.id, body: text,
+      direction: 'inbound', whatsapp_id: msgId, timestamp: new Date()
+    }]).select().single();
+
+    // Publish to background processing
+    if (process.env.QSTASH_TOKEN && chatMsg) {
+      await axios.post('https://qstash.upstash.io/v2/publish/url', {
+        url: `${process.env.SERVER_URL}/api/jobs/process-message`,
+        body: JSON.stringify({ message_id: chatMsg.id })
+      }, { headers: { Authorization: `Bearer ${process.env.QSTASH_TOKEN}`, 'Content-Type': 'application/json' } });
+    }
+  } catch (err) {
+    console.error('[Webhook error]', err.message);
+  }
+});
+
+// SEND/SKIP handler from vendor WhatsApp replies
+async function handleVendorReply(vendorPhone, command) {
+  const { data: vendor } = await supabase.from('users').select('id').eq('phone', vendorPhone).maybeSingle();
+  if (!vendor) return;
+
+  const { data: pending } = await supabase
+    .from('follow_up_queue').select('*, deals(*, contacts(*))')
+    .eq('user_id', vendor.id).eq('status', 'pending')
+    .order('created_at', { ascending: true }).limit(1).maybeSingle();
+
+  if (!pending) return;
+
+  if (command === 'SEND') {
+    const customerPhone = pending.deals?.contacts?.phone;
+    if (customerPhone) {
+      await sendWhatsApp(customerPhone, pending.message);
+      await supabase.from('deals').update({ last_contact_time: new Date().toISOString() }).eq('id', pending.deal_id);
+    }
+    await supabase.from('follow_up_queue').update({ status: 'approved' }).eq('id', pending.id);
+    await sendWhatsApp(vendorPhone, `✅ Message sent to ${pending.deals?.contacts?.name || 'customer'}.`);
+  } else if (command === 'SKIP') {
+    await supabase.from('follow_up_queue').update({ status: 'skipped' }).eq('id', pending.id);
+    await sendWhatsApp(vendorPhone, `✅ Skipped.`);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  BACKGROUND JOBS
+// ════════════════════════════════════════════════════════════════════════════
+
+// POST /api/jobs/process-message
+app.post('/api/jobs/process-message', jobAuth, async (req, res) => {
+  const { message_id } = req.body;
+  if (!message_id) return res.status(400).json({ error: 'message_id required' });
+  res.sendStatus(200);
+
+  try {
+    const { data: msg } = await supabase.from('chat_messages').select('*, contacts(*)').eq('id', message_id).single();
+    if (!msg) return;
+
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 5000);
+
+    const extraction = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a commerce intelligence AI. Analyze this WhatsApp message from a customer to a Nigerian vendor. Return JSON: {"is_commerce":bool,"confidence":number,"title":string,"amount":number|null}' },
+        { role: 'user', content: msg.body }
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 300, temperature: 0.1
+    }, { signal: controller.signal });
+
+    const result = JSON.parse(extraction.choices[0].message.content);
+    if (!result.is_commerce || result.confidence < 70) return;
+
+    // Find or create deal
+    const { data: existing } = await supabase
+      .from('deals').select('id').eq('contact_id', msg.contact_id)
+      .eq('user_id', msg.user_id).neq('status', 'paid').maybeSingle();
+
+    if (existing) {
+      await supabase.from('deals').update({
+        last_contact_time: new Date().toISOString(), updated_at: new Date().toISOString()
+      }).eq('id', existing.id);
+      await supabase.from('chat_messages').update({ deal_id: existing.id }).eq('id', message_id);
+    } else {
+      const { data: deal } = await supabase.from('deals').insert([{
+        user_id: msg.user_id, contact_id: msg.contact_id,
+        title: result.title || 'Untitled Product', amount: result.amount || 0,
+        status: 'inquiry', last_contact_time: new Date().toISOString()
+      }]).select().single();
+      if (deal) await supabase.from('chat_messages').update({ deal_id: deal.id }).eq('id', message_id);
+    }
+  } catch (err) {
+    console.error('[process-message]', err.message);
+  }
+});
+
+// POST /api/jobs/check-follow-ups
+app.post('/api/jobs/check-follow-ups', jobAuth, async (req, res) => {
+  res.sendStatus(200);
+  try {
+    const { data: vendors } = await supabase.from('users').select('id, phone, follow_up_hours').eq('whatsapp_connected', true);
+    if (!vendors?.length) return;
+
+    for (const vendor of vendors) {
+      const hours = vendor.follow_up_hours || 48;
+      const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+      const { data: staleDeal } = await supabase
+        .from('deals').select('*, contacts(*)')
+        .eq('user_id', vendor.id).neq('status', 'paid').neq('status', 'ghosted')
+        .lt('last_contact_time', cutoff).order('last_contact_time', { ascending: true }).limit(1).maybeSingle();
+
+      if (!staleDeal) continue;
+
+      // Generate follow-up message
+      let message;
       try {
-        // IDEMPOTENCY check
-        const { data: existing } = await supabase.from('chat_messages').select('id').eq('whatsapp_id', messageId).single();
-        if (existing) return res.sendStatus(200);
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'Generate a short, friendly WhatsApp follow-up message (2-3 sentences). Nigerian business English. No markdown.' },
+            { role: 'user', content: `Customer: ${staleDeal.contacts?.name}, Product: ${staleDeal.title}, Amount: ₦${staleDeal.amount}` }
+          ],
+          max_tokens: 150, temperature: 0.7
+        });
+        message = completion.choices[0].message.content.trim();
+      } catch {
+        message = `Hi ${staleDeal.contacts?.name?.split(' ')[0] || 'there'}! Just checking in on the ${staleDeal.title}. Are you still interested?`;
+      }
 
-        // Resolve vendor
-        const { data: user } = await supabase.from('users').select('id').eq('phone', to).single();
-        if (!user) {
-          console.error('[WHATSAPP] Unknown destination vendor:', to);
-          return res.sendStatus(200);
-        }
+      // Create queue entry
+      const { data: queueEntry } = await supabase.from('follow_up_queue').insert([{
+        user_id: vendor.id, deal_id: staleDeal.id,
+        contact_id: staleDeal.contact_id, message, status: 'pending'
+      }]).select().single();
 
-        const userId = user.id;
-
-        // Ensure contact exists
-        let { data: contact } = await supabase.from('contacts').select('id').eq('phone', from).eq('user_id', userId).single();
-        if (!contact) {
-          const { data: nc } = await supabase.from('contacts').insert([{ 
-            user_id: userId, 
-            phone: from, 
-            name: from, 
-            last_seen: new Date() 
-          }]).select().single();
-          contact = nc;
-        }
-
-        // Insert message for Edge Function processing
-        await supabase.from('chat_messages').insert([{ 
-          user_id: userId, 
-          contact_id: contact.id, 
-          body: text, 
-          direction: 'inbound', 
-          timestamp: new Date(),
-          whatsapp_id: messageId 
-        }]);
-
-        console.log(`[WHATSAPP] Received from ${from} for Sabi user ${userId}`);
-      } catch (err) {
-        console.error('[WHATSAPP WEBHOOK ERROR]:', err.message);
+      // Notify vendor via WhatsApp
+      if (vendor.phone && queueEntry) {
+        const days = Math.floor((Date.now() - new Date(staleDeal.last_contact_time).getTime()) / 86400000);
+        await sendWhatsApp(vendor.phone,
+          `🔔 Sabi: Follow up with ${staleDeal.contacts?.name} about "${staleDeal.title}" (${days}d ago)\n\nSuggested:\n"${message}"\n\nReply SEND to send, SKIP to skip.`
+        );
       }
     }
-    return res.sendStatus(200);
+  } catch (err) {
+    console.error('[check-follow-ups]', err.message);
   }
-  res.sendStatus(404);
 });
 
-// 3. Deals API
-app.get('/api/deals', authMiddleware, async (req, res) => {
+// POST /api/jobs/morning-brief
+app.post('/api/jobs/morning-brief', jobAuth, async (req, res) => {
+  res.sendStatus(200);
   try {
-      const { data, error } = await supabase.from('deals').select('*, contacts(*)').eq('user_id', req.user.id).order('created_at', { ascending: false });
-      if (error) throw error;
-      res.json(data || []);
-  } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch deals' });
-  }
-});
+    const { data: vendors } = await supabase.from('users').select('id, phone, business_name').eq('whatsapp_connected', true);
+    if (!vendors?.length) return;
 
-// 4. Paystack
-app.post('/api/payments/initialize', authMiddleware, async (req, res) => {
-  const { dealId, amount } = req.body;
-  if (!dealId || !amount) return res.status(400).json({ error: 'Missing dealId or amount' });
+    for (const vendor of vendors) {
+      const { data: deals } = await supabase.from('deals').select('status, amount').eq('user_id', vendor.id);
+      if (!deals?.length) continue;
 
-  try {
-    const response = await axios.post('https://api.paystack.co/transaction/initialize', {
-      email: `${req.user.phone}@sabi.app`,
-      amount: Math.round(amount * 100), // kobo
-      metadata: { deal_id: dealId, user_id: req.user.id }
-    }, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
-    
-    const { authorization_url, reference } = response.data.data;
-    await supabase.from('payments').insert([{ deal_id: dealId, amount, verified_status: 'pending', reference }]);
-    res.json({ checkoutUrl: authorization_url, reference });
-  } catch (error) {
-    console.error('Payment init error:', error);
-    res.status(500).json({ error: 'Payment initialization failed' });
-  }
-});
+      const open   = deals.filter(d => d.status !== 'paid').length;
+      const paid   = deals.filter(d => d.status === 'paid');
+      const today  = new Date(); today.setHours(0,0,0,0);
+      const todayRev = paid.filter(d => new Date(d.updated_at) >= today).reduce((s,d) => s + (d.amount||0), 0);
+      const totalRev  = paid.reduce((s,d) => s + (d.amount||0), 0);
 
-// Paystack Server-side Webhook (Crucial for Bank Transfer/USSD)
-app.post('/api/webhook/paystack', async (req, res) => {
-  const hash = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
-                     .update(JSON.stringify(req.body))
-                     .digest('hex');
-  
-  if (hash !== req.headers['x-paystack-signature']) {
-    return res.status(401).send('Invalid signature');
-  }
-
-  const { event, data } = req.body;
-  if (event === 'charge.success') {
-    const { deal_id } = data.metadata;
-    
-    await supabase.from('payments').update({ verified_status: 'verified' }).eq('deal_id', deal_id);
-    await supabase.from('deals').update({ status: 'paid' }).eq('id', deal_id);
-    console.log(`[PAYSTACK] Payment confirmed for deal: ${deal_id}`);
-  }
-
-  res.status(200).send('OK');
-});
-
-app.get('/api/payments/verify/:reference', authMiddleware, async (req, res) => {
-  const { reference } = req.params;
-
-  try {
-    const response = await axios.get(`https://api.paystack.co/transaction/verify/${reference}`, {
-      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
-    });
-
-    if (response.data.data.status === 'success') {
-      const { deal_id } = response.data.data.metadata;
-      
-      await supabase.from('payments').update({ verified_status: 'verified' }).eq('deal_id', deal_id);
-      await supabase.from('deals').update({ status: 'paid' }).eq('id', deal_id);
-      
-      res.json({ status: 'success' });
-    } else {
-      res.json({ status: 'failed' });
+      if (vendor.phone) {
+        await sendWhatsApp(vendor.phone,
+          `☀️ Good morning from Sabi!\n\n📊 Your Summary:\n• Open deals: ${open}\n• Today's revenue: ₦${todayRev.toLocaleString()}\n• Total revenue: ₦${totalRev.toLocaleString()}\n\nHave a great day! 💚`
+        );
+      }
     }
-  } catch (error) {
-    console.error('Verify error:', error);
-    res.status(500).json({ error: 'Payment verification failed' });
+  } catch (err) {
+    console.error('[morning-brief]', err.message);
   }
 });
 
-// 5. Analytics
-app.get('/api/analytics/summary', authMiddleware, async (req, res) => {
-  try {
-      const { data: deals, error } = await supabase.from('deals').select('amount, status, created_at').eq('user_id', req.user.id);
-      if (error) throw error;
-
-      const summary = (deals || []).reduce((acc, d) => {
-        acc.totalDeals++;
-        if (d.status === 'paid') { 
-            acc.closedDeals++; 
-            acc.revenue += (Number(d.amount) || 0); 
-        }
-        if (d.status === 'ghosted') acc.ghosted++;
-        return acc;
-      }, { totalDeals: 0, closedDeals: 0, revenue: 0, ghosted: 0 });
-
-      res.json(summary);
-  } catch (error) {
-      console.error('Analytics error:', error);
-      res.status(500).json({ error: 'Failed to fetch analytics' });
-  }
-});
-
-const server = app.listen(port, () => console.log(`Sabi Server on ${port}`));
-
-// SIGTERM handler
-const shutdown = () => {
-  console.log('Shutting down server...');
-  server.close(() => {
-    console.log('Server closed.');
-    process.exit(0);
-  });
-};
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+// ─── START ───────────────────────────────────────────────────────────────────
+if (process.env.NODE_ENV !== 'production') {
+  const server = app.listen(port, () => console.log(`[Sabi] Server on :${port}`));
+  process.on('SIGTERM', () => server.close(() => process.exit(0)));
+  process.on('SIGINT',  () => server.close(() => process.exit(0)));
+}
 
 export default app;
