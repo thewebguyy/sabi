@@ -1,210 +1,154 @@
-import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { QrCode, Smartphone, CheckCircle2, ChevronRight, MessageSquare, Flame } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { QRCodeSVG } from 'qrcode.react'
-import { useStore } from '../store/useStore'
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
+import { Loader2, ArrowRight, Shield, Smartphone } from 'lucide-react';
+import { useStore } from '../store/useStore';
 
-const Connect: React.FC = () => {
-  const [step, setStep] = useState(1)
-  const [progress, setProgress] = useState(0)
-  const navigate = useNavigate()
-  const { user, deals } = useStore()
-
-  useEffect(() => {
-    if (step === 2) {
-      const interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval)
-            setTimeout(() => setStep(3), 800)
-            return 100
-          }
-          return prev + 5
-        })
-      }, 150)
-      return () => clearInterval(interval)
-    }
-  }, [step])
-
-  const nextStep = () => {
-    if (step < 3) setStep(step + 1)
-    else navigate('/dashboard')
+declare global {
+  interface Window {
+    fbAsyncInit: () => void;
+    FB: any;
   }
-
-  const steps = [
-    { title: 'Link', icon: <QrCode size={16} /> },
-    { title: 'Learn', icon: <MessageSquare size={16} /> },
-    { title: 'Start', icon: <CheckCircle2 size={16} /> },
-  ]
-
-  return (
-    <div className="min-h-screen bg-background text-text-primary px-6 pt-12">
-      {/* Progress Dots */}
-      <div className="flex justify-center items-center gap-12 mb-16 relative">
-         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-[1px] bg-surface-2 -z-10"></div>
-         {steps.map((s, i) => (
-           <div key={i} className="flex flex-col items-center gap-2">
-             <div className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all ${step > i + 1 ? 'bg-accent border-accent text-primary' : step === i + 1 ? 'border-accent text-accent' : 'border-surface-2 text-text-muted bg-surface'}`}>
-               {s.icon}
-             </div>
-             <span className={`text-[10px] font-bold uppercase tracking-wider ${step === i + 1 ? 'text-accent' : 'text-text-muted'}`}>{s.title}</span>
-           </div>
-         ))}
-      </div>
-
-      <AnimatePresence mode="wait">
-        {step === 1 && (
-          <motion.div
-            key="step1"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-8"
-          >
-            <div className="text-center">
-              <h2 className="text-3xl font-syne font-extrabold mb-4">Connect your WhatsApp</h2>
-              <p className="text-text-muted text-lg leading-relaxed px-4">Scan the code to let Sabi track your business deals.</p>
-            </div>
-
-            <div className="flex justify-center">
-               <div className="p-8 bg-surface rounded-[40px] border-4 border-accent shadow-[0_0_50px_rgba(37,211,102,0.15)] relative">
-                  <div className="flex items-center justify-center bg-white p-4 rounded-3xl">
-                    <QRCodeSVG 
-                      value={`https://sabi-crm.vercel.app/link?v=${user?.id || 'demo'}`} 
-                      size={200}
-                      fgColor="#0D0D0D"
-                    />
-                  </div>
-                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-accent text-primary text-[10px] font-extrabold py-1 px-4 rounded-full uppercase tracking-widest whitespace-nowrap">
-                    SCAN TO LINK
-                  </div>
-               </div>
-            </div>
-
-            <div className="space-y-4 pt-8">
-              <div className="flex items-center gap-4 bg-surface-2 p-4 rounded-2xl border border-white/5">
-                <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-accent font-bold">1</div>
-                <p className="text-sm font-medium">Open WhatsApp → Tap ⋮ → Linked Devices</p>
-              </div>
-              <div className="flex items-center gap-4 bg-surface-2 p-4 rounded-2xl border border-white/5">
-                <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-accent font-bold">2</div>
-                <p className="text-sm font-medium">Link a Device → Scan the QR Code</p>
-              </div>
-            </div>
-
-            <div className="bg-surface p-4 rounded-2xl text-center border border-accent/10">
-               <span className="text-[11px] text-text-muted/70 leading-relaxed font-body">
-                Sabi uses the <strong>official WhatsApp Business API</strong>.<br />
-                We never read or store your personal messages.
-               </span>
-            </div>
-
-            <button 
-              onClick={nextStep}
-              className="w-full bg-accent text-primary font-extrabold py-4 rounded-xl text-lg flex items-center justify-center gap-2 shadow-[0_10px_30px_rgba(37,211,102,0.2)]"
-            >
-              I've Scanned It
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </motion.div>
-        )}
-
-        {step === 2 && (
-          <motion.div
-            key="step2"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            className="flex flex-col items-center justify-center py-20 text-center space-y-8"
-          >
-            <div className="relative w-40 h-40">
-               <motion.div 
-                 animate={{ rotate: 360 }}
-                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                 className="absolute inset-0 border-4 border-accent border-t-transparent rounded-full shadow-[0_0_30px_rgba(37,211,102,0.2)]"
-               />
-               <div className="absolute inset-4 bg-surface rounded-full flex items-center justify-center overflow-hidden">
-                 <motion.div 
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ repeat: Infinity, duration: 1.5 }}
-                    className="flex flex-col items-center text-accent"
-                 >
-                   <Flame fill="currentColor" size={48} className="text-hot" />
-                   <span className="font-syne font-extrabold text-xs mt-2 text-text-primary">SABI SYNC</span>
-                 </motion.div>
-               </div>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-syne font-extrabold">Learning your business...</h2>
-              <p className="text-text-muted">Syncing your last 20 conversations.</p>
-            </div>
-
-            <div className="w-full max-w-[240px] h-2 bg-surface-2 rounded-full border border-white/5 overflow-hidden">
-               <motion.div 
-                 className="h-full bg-accent shadow-[0_0_15px_rgba(37,211,102,0.5)]"
-                 animate={{ width: `${progress}%` }}
-               />
-            </div>
-            
-            <p className="text-[10px] text-accent font-bold uppercase tracking-widest animate-pulse">Scanning for leads...</p>
-          </motion.div>
-        )}
-
-        {step === 3 && (
-          <motion.div
-            key="step3"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-8 pb-10"
-          >
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-accent/10 border-2 border-accent text-accent mb-6 shadow-[0_0_40px_rgba(37,211,102,0.1)]">
-                <CheckCircle2 size={40} />
-              </div>
-              <h2 className="text-3xl font-syne font-extrabold mb-4">You're ready!</h2>
-              <p className="text-text-muted text-lg">Sabi found your first 3 deals.</p>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              {deals.length > 0 ? (
-                deals.slice(0, 3).map((d: any, i: number) => (
-                  <div key={d.id} className="bg-surface p-5 rounded-3xl border border-white/5 flex items-center gap-4 relative overflow-hidden">
-                    <div className={`absolute top-0 right-0 py-1.5 px-3 ${d.status === 'paid' ? 'bg-accent' : 'bg-hot'} text-primary text-[10px] font-extrabold uppercase rounded-bl-xl tracking-tight`}>
-                      {d.status === 'pending' ? 'New Lead' : d.status === 'paid' ? 'Closed' : 'Action Required'}
-                    </div>
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold ${i === 0 ? 'bg-primary text-accent' : 'bg-surface-2 text-text-primary'}`}>
-                      {d.contacts?.name?.substring(0, 2).toUpperCase() || '??'}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-base">{d.contacts?.name || 'Unknown'}</h4>
-                      <p className="text-xs text-text-muted truncate w-40">{d.title}</p>
-                      <p className={`text-sm font-mono font-medium mt-1 ${d.status === 'paid' ? 'text-accent' : 'text-text-primary'}`}>
-                        {d.amount > 0 ? `₦${d.amount.toLocaleString()}` : 'Price Pending'}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-10 text-center text-text-muted">
-                  Searching for leads in your chat history...
-                </div>
-              )}
-            </div>
-
-            <button 
-              onClick={nextStep}
-              className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-xl flex items-center justify-center gap-3 shadow-[0_15px_30px_rgba(37,211,102,0.2)]"
-            >
-              Take me to my dashboard
-              <ChevronRight className="w-6 h-6" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
 }
 
-export default Connect
+const Connect: React.FC = () => {
+  const navigate = useNavigate();
+  const { updateUser, token } = useStore();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    window.fbAsyncInit = function () {
+      window.FB.init({
+        appId: import.meta.env.VITE_META_APP_ID || '807558255232766', // fallback for dev
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: 'v17.0'
+      });
+    };
+
+    (function (d, s, id) {
+      let js, fjs = d.getElementsByTagName(s)[0];
+      if (d.getElementById(id)) { return; }
+      js = d.createElement(s) as HTMLScriptElement; js.id = id;
+      js.src = "https://connect.facebook.net/en_US/sdk.js";
+      fjs?.parentNode?.insertBefore(js, fjs);
+    }(document, 'script', 'facebook-jssdk'));
+  }, []);
+
+  const handleConnect = () => {
+    if (!window.FB) {
+      setError('Facebook SDK failed to load. Please check your connection.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    window.FB.login((response: any) => {
+      if (response.authResponse) {
+        const accessToken = response.authResponse.accessToken;
+        
+        // For embedded signup, Meta typically returns the WABA ID and Phone Number ID via a separate API call 
+        // or webhook, but we'll mock the completion for the MVP frontend using the access token.
+        // In a full implementation, you would query the Graph API to get the phone_number_id here.
+        
+        // Mocking the extraction of phone_number_id for MVP
+        const mockPhoneNumberId = "whatsapp_" + Date.now();
+
+        fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/whatsapp/register-number`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            phone_number_id: mockPhoneNumberId,
+            access_token: accessToken
+          })
+        }).then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              updateUser({ whatsapp_connected: true, whatsapp_phone_id: mockPhoneNumberId });
+              navigate('/deals');
+            } else {
+              setError(data.error || 'Failed to register number');
+              setLoading(false);
+            }
+          })
+          .catch(err => {
+            setError(err.message);
+            setLoading(false);
+          });
+      } else {
+        setError('Login cancelled or failed.');
+        setLoading(false);
+      }
+    }, {
+      scope: 'business_management,whatsapp_business_messaging,whatsapp_business_management',
+      return_scopes: true
+    });
+  };
+
+  const handleSkip = () => {
+    // Just navigate to deals, we don't force them back here
+    localStorage.setItem('sabi_has_skipped_connect', 'true');
+    navigate('/deals');
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col justify-center px-6 pb-20 relative">
+      <div className="absolute inset-0 bg-gradient-to-b from-surface to-background pointer-events-none" />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative z-10 w-full max-w-sm mx-auto bg-surface border border-white/5 p-8 rounded-3xl shadow-2xl"
+      >
+        <div className="w-16 h-16 bg-[#25D366]/10 rounded-2xl flex items-center justify-center text-[#25D366] mb-6 mx-auto">
+          <Smartphone size={32} />
+        </div>
+
+        <h2 className="text-2xl font-extrabold text-center mb-3">Connect WhatsApp</h2>
+        <p className="text-text-muted text-center text-sm mb-8 leading-relaxed">
+          Connect your WhatsApp Business number so Sabi can read your customer messages automatically. Takes 2 minutes. You only do this once.
+        </p>
+
+        {error && (
+          <div className="bg-hot/10 text-hot text-xs p-3 rounded-lg mb-6 text-center border border-hot/20">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <button
+            onClick={handleConnect}
+            disabled={loading}
+            className="w-full h-14 bg-[#1877F2] hover:bg-[#1877F2]/90 text-white rounded-2xl font-bold flex items-center justify-center gap-3 transition-colors disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={20} className="animate-spin" /> : (
+              <>
+                <Shield size={20} />
+                Connect with Facebook
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleSkip}
+            disabled={loading}
+            className="w-full h-14 bg-transparent border border-white/10 text-text-muted rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-white/5 transition-colors"
+          >
+            Skip for now
+            <ArrowRight size={16} />
+          </button>
+        </div>
+        
+        <p className="text-center text-[10px] text-text-muted/40 mt-8">
+          By connecting, you agree to Meta's WhatsApp Business terms of service.
+        </p>
+      </motion.div>
+    </div>
+  );
+};
+
+export default Connect;

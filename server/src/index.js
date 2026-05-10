@@ -52,17 +52,39 @@ const jobAuth = (req, res, next) => {
 };
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
+const sendDiscordAlert = async (title, message, error = null) => {
+  if (!process.env.DISCORD_WEBHOOK_URL) return;
+  try {
+    const embed = {
+      title,
+      description: message,
+      color: 16711680, // Red
+      fields: error ? [{ name: 'Error', value: error.toString().substring(0, 1024) }] : [],
+      timestamp: new Date().toISOString()
+    };
+    await axios.post(process.env.DISCORD_WEBHOOK_URL, { embeds: [embed] });
+  } catch (err) {
+    console.error('[Discord] Failed to send alert', err.message);
+  }
+};
+
 const sendWhatsApp = async (to, message) => {
   const token   = process.env.WHATSAPP_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_ID;
   if (!token || !phoneId) { console.warn('[WA] No creds'); return; }
-  await axios.post(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: to.replace(/\D/g, ''),
-    type: 'text',
-    text: { body: message }
-  }, { headers: { Authorization: `Bearer ${token}` } });
+  try {
+    await axios.post(`https://graph.facebook.com/v17.0/${phoneId}/messages`, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: to.replace(/\D/g, ''),
+      type: 'text',
+      text: { body: message }
+    }, { headers: { Authorization: `Bearer ${token}` } });
+  } catch (err) {
+    console.error('[WA send error]', err.response?.data || err.message);
+    await sendDiscordAlert('WhatsApp Send Failure', `Failed to send message to ${to}`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
+    throw err;
+  }
 };
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
@@ -97,7 +119,7 @@ app.post('/api/auth/send-otp', authLimiter, async (req, res) => {
 
 // POST /api/auth/verify-otp
 app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
-  const { phone, otp } = req.body;
+  const { phone, otp, referredBy } = req.body;
   if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP required' });
   try {
     const { data: stored } = await supabase
@@ -132,10 +154,13 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
     if (authErr) throw authErr;
 
     // Create user profile
+    const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     await supabase.from('users').insert([{
       id: newAuthUser.user.id, phone, has_seeded: false,
       follow_up_hours: 48,
-      notification_preferences: { summary: true, ghosting: true, payments: true }
+      notification_preferences: { summary: true, ghosting: true, payments: true },
+      referral_code: referralCode,
+      referred_by: referredBy || null
     }]);
 
     const { data: adminSession } = await supabase.auth.admin.generateLink({
@@ -298,9 +323,30 @@ app.post('/api/deals/:id/follow-up', auth, aiLimiter, async (req, res) => {
 
 app.get('/api/revenue', auth, async (req, res) => {
   const { data: paid } = await supabase
-    .from('deals').select('amount, updated_at, title, contacts(name)')
+    .from('deals').select('id, amount, updated_at, title, contacts(name)')
     .eq('user_id', req.user.id).eq('status', 'paid')
     .order('updated_at', { ascending: false });
+
+  // Calculate recovered revenue
+  const { data: followedUp } = await supabase
+    .from('follow_up_queue')
+    .select('deal_id')
+    .eq('user_id', req.user.id)
+    .eq('status', 'approved');
+
+  const followedUpDealIds = new Set((followedUp || []).map(f => f.deal_id));
+  const recoveredDeals = (paid || []).filter(d => followedUpDealIds.has(d.id));
+  const recovered_revenue = recoveredDeals.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const recovered_deals_count = recoveredDeals.length;
+
+  const { data: paystackPayments } = await supabase
+    .from('payments').select('deal_id').eq('verified_status', 'verified');
+  const paystackDealIds = new Set((paystackPayments || []).map(p => p.deal_id));
+
+  const enrichedPaid = (paid || []).map(d => ({
+    ...d,
+    via_paystack: paystackDealIds.has(d.id)
+  }));
 
   const now = new Date();
   const wStart = new Date(now); wStart.setDate(now.getDate() - now.getDay()); wStart.setHours(0,0,0,0);
@@ -311,10 +357,10 @@ app.get('/api/revenue', auth, async (req, res) => {
   const sum = (arr) => arr.reduce((s, d) => s + (Number(d.amount) || 0), 0);
   const filter = (arr, from, to) => arr.filter(d => { const t = new Date(d.updated_at); return t >= from && (!to || t < to); });
 
-  const thisWeek  = filter(paid, wStart);
-  const lastWeek  = filter(paid, wLast, wStart);
-  const thisMonth = filter(paid, mStart);
-  const today     = filter(paid, todayStart);
+  const thisWeek  = filter(enrichedPaid, wStart);
+  const lastWeek  = filter(enrichedPaid, wLast, wStart);
+  const thisMonth = filter(enrichedPaid, mStart);
+  const today     = filter(enrichedPaid, todayStart);
 
   const weekTotal = sum(thisWeek), lastWeekTotal = sum(lastWeek);
   const weekPct = lastWeekTotal ? Math.round(((weekTotal - lastWeekTotal) / lastWeekTotal) * 100) : null;
@@ -322,8 +368,107 @@ app.get('/api/revenue', auth, async (req, res) => {
   res.json({
     today: sum(today), thisWeek: weekTotal, lastWeek: lastWeekTotal,
     weekPct, thisMonth: sum(thisMonth),
-    recent: (paid || []).slice(0, 20)
+    recovered_revenue, recovered_deals: recovered_deals_count,
+    recent: (enrichedPaid || []).slice(0, 20)
   });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PAYMENTS & REFERRALS
+// ════════════════════════════════════════════════════════════════════════════
+
+app.post('/api/payments/generate-link', auth, async (req, res) => {
+  const { deal_id, amount, customer_phone } = req.body;
+  if (!deal_id || !amount) return res.status(400).json({ error: 'deal_id and amount required' });
+  if (!process.env.PAYSTACK_SECRET_KEY) return res.status(500).json({ error: 'Paystack not configured' });
+
+  try {
+    const email = `${customer_phone?.replace(/\D/g, '') || 'customer'}@sabi.app`;
+    const response = await axios.post('https://api.paystack.co/transaction/initialize', {
+      email,
+      amount: Math.round(amount * 100), // Kobo
+      metadata: { deal_id, user_id: req.user.id }
+    }, {
+      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
+    });
+
+    const { authorization_url, reference } = response.data.data;
+
+    await supabase.from('payments').insert([{
+      deal_id, amount, reference, verified_status: 'pending'
+    }]);
+
+    res.json({ payment_url: authorization_url, reference });
+  } catch (err) {
+    console.error('[Paystack Init]', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to generate link' });
+  }
+});
+
+app.post('/api/webhook/paystack', async (req, res) => {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) return res.sendStatus(200);
+
+  const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
+  if (hash !== req.headers['x-paystack-signature']) return res.sendStatus(400);
+
+  res.sendStatus(200);
+
+  const event = req.body;
+  if (event.event === 'charge.success') {
+    const { reference, metadata, amount } = event.data;
+    if (!metadata?.deal_id || !metadata?.user_id) return;
+
+    try {
+      await supabase.from('payments').update({ verified_status: 'verified' }).eq('reference', reference);
+      await supabase.from('deals').update({ status: 'paid', last_contact_time: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', metadata.deal_id);
+
+      const { data: user } = await supabase.from('users').select('phone').eq('id', metadata.user_id).single();
+      const { data: deal } = await supabase.from('deals').select('contacts(name)').eq('id', metadata.deal_id).single();
+      
+      const { data: paid } = await supabase.from('deals').select('amount').eq('user_id', metadata.user_id).eq('status', 'paid').gte('updated_at', new Date().setHours(0,0,0,0));
+      const todayTotal = paid?.reduce((s,d) => s + (Number(d.amount)||0), 0) || 0;
+
+      if (user?.phone) {
+        await sendWhatsApp(user.phone, `💰 Payment confirmed — ₦${amount/100} received from ${deal?.contacts?.name || 'customer'}.\nDeal closed. Today's total: ₦${todayTotal}`);
+      }
+    } catch (err) {
+      console.error('[Paystack webhook handler]', err.message);
+      await sendDiscordAlert('Paystack Webhook Failure', 'Error processing successful charge', err.message);
+    }
+  }
+});
+
+app.get('/api/referral/stats', auth, async (req, res) => {
+  try {
+    const { data: user } = await supabase.from('users').select('referral_code').eq('id', req.user.id).single();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const referralCode = user.referral_code;
+    const { data: referredUsers } = await supabase.from('users').select('id, created_at').eq('referred_by', referralCode);
+    
+    // For MVP, total is count of referred. Pending = less than 30 days old. Earned = older than 30 days.
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    let pending = 0;
+    let earned = 0;
+    
+    (referredUsers || []).forEach(ru => {
+      if (new Date(ru.created_at) < thirtyDaysAgo) earned++;
+      else pending++;
+    });
+
+    res.json({
+      referral_code: referralCode,
+      referral_link: `${process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173'}/auth?ref=${referralCode}`,
+      total_referrals: (referredUsers || []).length,
+      pending_referrals: pending,
+      earned_months: earned
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -480,6 +625,7 @@ app.post('/api/jobs/process-message', jobAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('[process-message]', err.message);
+    await sendDiscordAlert('AI Extraction Failure', `Failed to process message ID: ${message_id}`, err.message);
   }
 });
 
@@ -533,6 +679,7 @@ app.post('/api/jobs/check-follow-ups', jobAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('[check-follow-ups]', err.message);
+    await sendDiscordAlert('QStash Job Failure: check-follow-ups', 'Job encountered an error', err.message);
   }
 });
 
@@ -561,7 +708,36 @@ app.post('/api/jobs/morning-brief', jobAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('[morning-brief]', err.message);
+    await sendDiscordAlert('QStash Job Failure: morning-brief', 'Job encountered an error', err.message);
   }
+});
+
+// POST /api/whatsapp/register-number
+app.post('/api/whatsapp/register-number', auth, async (req, res) => {
+  const { phone_number_id, access_token } = req.body;
+  if (!phone_number_id || !access_token) return res.status(400).json({ error: 'Missing credentials' });
+  
+  try {
+    // In a real production app, you would encrypt the access_token before storing.
+    // For MVP, we'll store them directly in the DB or encrypted column.
+    await supabase.from('users').update({ 
+      whatsapp_connected: true,
+      whatsapp_phone_id: phone_number_id,
+      // For MVP we just use the system token, but if we stored per-user token:
+      // whatsapp_access_token: access_token 
+    }).eq('id', req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[register-number]', err.message);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// Global Error Handler
+app.use(async (err, req, res, next) => {
+  console.error('[Global Error]', err.stack);
+  await sendDiscordAlert('Unhandled Exception', `Error on ${req.method} ${req.url}`, err.stack);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // ─── START ───────────────────────────────────────────────────────────────────

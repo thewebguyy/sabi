@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ExternalLink, CheckCircle2, Clock, MessageSquare } from 'lucide-react'
+import { ArrowLeft, ExternalLink, CheckCircle2, Clock, MessageSquare, Link2 } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { useStore, Deal } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import FollowUpSheet from '../components/FollowUpSheet'
 import { getWhatsAppLink } from '../lib/utils'
+import axios from 'axios'
 
 const timeAgo = (dateStr: string): string => {
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
@@ -36,6 +37,7 @@ const DealDetail: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [followUpOpen, setFollowUpOpen] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
   const [note, setNote] = useState('')
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -80,6 +82,32 @@ const DealDetail: React.FC = () => {
       await updateDeal(deal.id, { summary: val })
       setSavingNote(false)
     }, 800)
+  }
+
+  const handlePaymentLink = async () => {
+    if (!deal) return;
+    setGeneratingLink(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await axios.post(`${apiUrl}/api/payments/generate-link`, {
+        deal_id: deal.id,
+        amount: deal.amount,
+        customer_phone: deal.contacts?.phone
+      }, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+      })
+      const paymentUrl = res.data.payment_url;
+      const name = deal.contacts?.name?.split(' ')[0] || 'there';
+      const text = `Hi ${name}! Here's your payment link for ${deal.title}:\n${paymentUrl} — ₦${deal.amount}`;
+      const encoded = encodeURIComponent(text);
+      const phone = deal.contacts?.phone ? deal.contacts.phone.replace(/\D/g, '') : '';
+      window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to generate payment link');
+    } finally {
+      setGeneratingLink(false);
+    }
   }
 
   if (loading) {
@@ -162,6 +190,19 @@ const DealDetail: React.FC = () => {
             <Clock size={18} className="text-accent" />
             Follow Up
           </button>
+
+          {(deal.status === 'pending' || deal.status === 'waiting_payment') && (
+            <button
+              onClick={handlePaymentLink}
+              disabled={generatingLink}
+              className="w-full bg-surface-2 border border-white/5 py-4 rounded-2xl text-sm font-bold text-text-primary flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:border-accent/20 disabled:opacity-60"
+            >
+              {generatingLink
+                ? <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                : <><Link2 size={18} className="text-accent" /> Send Payment Link</>
+              }
+            </button>
+          )}
 
           <button
             onClick={handleMarkPaid}

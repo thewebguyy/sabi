@@ -56,7 +56,9 @@ const Auth: React.FC = () => {
     setError(null)
     try {
       const apiUrl = import.meta.env.VITE_API_URL || ''
-      const res = await axios.post(`${apiUrl}/api/auth/verify-otp`, { phone, otp })
+      const urlParams = new URLSearchParams(window.location.search);
+      const referredBy = urlParams.get('ref');
+      const res = await axios.post(`${apiUrl}/api/auth/verify-otp`, { phone, otp, referredBy })
       
       if (res.data.isNewUser) {
         setStep('business')

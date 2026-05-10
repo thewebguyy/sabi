@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Edit3, Send } from 'lucide-react'
+import { X, Edit3, Send, Link2 } from 'lucide-react'
 import { Deal } from '../store/useStore'
 import axios from 'axios'
 import { supabase } from '../lib/supabase'
@@ -18,6 +18,7 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
   const [generating, setGenerating] = useState(true)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -67,6 +68,33 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
       setError(err.response?.data?.error || 'Failed to send message')
     } finally {
       setSending(false)
+    }
+  }
+
+  const handlePaymentLink = async () => {
+    setGeneratingLink(true)
+    setError(null)
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await axios.post(`${apiUrl}/api/payments/generate-link`, {
+        deal_id: deal.id,
+        amount: deal.amount,
+        customer_phone: deal.contacts?.phone
+      }, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+      })
+      const paymentUrl = res.data.payment_url;
+      const name = deal.contacts?.name?.split(' ')[0] || 'there';
+      const text = `Hi ${name}! Here's your payment link for ${deal.title}:\n${paymentUrl} — ₦${deal.amount}`;
+      const encoded = encodeURIComponent(text);
+      const phone = deal.contacts?.phone ? deal.contacts.phone.replace(/\D/g, '') : '';
+      window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+      onClose();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to generate payment link')
+    } finally {
+      setGeneratingLink(false)
     }
   }
 
@@ -150,6 +178,17 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
                 : sent
                 ? '✓ Sent!'
                 : <><Send size={18} /> Send Now</>
+              }
+            </button>
+
+            <button
+              onClick={handlePaymentLink}
+              disabled={sending || generating || generatingLink}
+              className="w-full bg-surface-2 text-text-primary font-bold py-5 rounded-2xl text-base active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 border border-white/5"
+            >
+              {generatingLink
+                ? <div className="w-5 h-5 border-2 border-text-muted border-t-transparent rounded-full animate-spin" />
+                : <><Link2 size={18} /> Send Payment Link</>
               }
             </button>
 

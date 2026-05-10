@@ -1,7 +1,10 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Building, Phone, CheckCircle2, AlertCircle, LogOut } from 'lucide-react'
+import { Building, Phone, CheckCircle2, AlertCircle, LogOut, Gift, Copy } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
+import { supabase } from '../lib/supabase'
+import axios from 'axios'
 
 const FOLLOW_UP_OPTIONS = [
   { label: '24h', value: 24 },
@@ -11,8 +14,28 @@ const FOLLOW_UP_OPTIONS = [
 
 const Settings: React.FC = () => {
   const { user, signOut, updateUser } = useStore()
+  const navigate = useNavigate()
   const [businessName, setBusinessName] = useState(user?.business_name || '')
   const [savingName, setSavingName] = useState(false)
+  const [referralStats, setReferralStats] = useState<any>(null)
+  const [copiedLink, setCopiedLink] = useState(false)
+
+  React.useEffect(() => {
+    const fetchReferrals = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || ''
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+        const res = await axios.get(`${apiUrl}/api/referral/stats`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        })
+        setReferralStats(res.data)
+      } catch (err) {
+        console.error('Failed to fetch referrals', err)
+      }
+    }
+    fetchReferrals()
+  }, [])
 
   const handleNameBlur = async () => {
     if (!businessName.trim() || businessName === user?.business_name) return
@@ -82,13 +105,19 @@ const Settings: React.FC = () => {
             <p className="text-xs text-text-muted mt-0.5">
               {isConnected
                 ? 'WhatsApp Business API is active'
-                : 'Connect via your Meta Business Manager'
+                : 'Connect via Meta to auto-sync'
               }
             </p>
           </div>
-          <div className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${isConnected ? 'bg-accent text-primary' : 'bg-hot text-primary'}`}>
-            {isConnected ? 'Active' : 'Offline'}
-          </div>
+          {!isConnected ? (
+            <button onClick={() => navigate('/connect')} className="px-4 py-2 rounded-xl text-xs font-extrabold bg-accent text-primary transition-transform active:scale-95">
+              Connect
+            </button>
+          ) : (
+            <div className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-accent text-primary">
+              Active
+            </div>
+          )}
         </div>
       </section>
 
@@ -112,6 +141,51 @@ const Settings: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* Refer & Earn */}
+      {referralStats && (
+        <section className="space-y-3">
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Refer & Earn</h3>
+          <div className="bg-gradient-to-br from-accent/20 to-surface rounded-3xl border border-accent/20 p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-accent text-primary flex items-center justify-center">
+                <Gift size={20} />
+              </div>
+              <div>
+                <p className="font-extrabold text-sm text-text-primary">Get 1 Month Free</p>
+                <p className="text-xs text-text-muted mt-0.5">For every active friend you invite</p>
+              </div>
+            </div>
+            
+            <div className="bg-surface-2 rounded-2xl border border-white/5 p-3 flex justify-between items-center gap-3">
+              <div className="text-xs font-mono truncate text-text-muted flex-1 pl-1">
+                {referralStats.referral_link}
+              </div>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(referralStats.referral_link)
+                  setCopiedLink(true)
+                  setTimeout(() => setCopiedLink(false), 2000)
+                }}
+                className="w-8 h-8 rounded-xl bg-accent text-primary flex items-center justify-center flex-shrink-0 active:scale-95 transition-all"
+              >
+                {copiedLink ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div>
+                <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Pending</p>
+                <p className="text-lg font-mono font-extrabold">{referralStats.pending_referrals}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-accent uppercase tracking-widest">Earned</p>
+                <p className="text-lg font-mono font-extrabold text-accent">{referralStats.earned_months} mos</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Sign Out */}
       <section className="pt-4">
