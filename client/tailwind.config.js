@@ -7,16 +7,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: "#0A3828", // deep forest green
-        accent: "#25D366", // WhatsApp green
-        hot: "#FF6B35", // orange
-        background: "#0D0D0D", // near-black
-        surface: "#161616",
+        background: "#0A0A0A",
+        surface: "#141414",
         "surface-2": "#1F1F1F",
-        "text-primary": "#F0F0F0",
-        "text-muted": "#7A7A7A",
-        success: "#4CAF50",
-        gold: "#D4A843", // market stall gold
+        "surface-border": "#262626",
+        "text-primary": "#F3F2EF",
+        "text-muted": "#8E8E93",
+        accent: "#FFB020",        // attention / money / amber
+        "accent-whatsapp": "#25D366",
+        success: "#10B981",       // emerald — won deals
+        danger: "#EF4444",        // lost / cancel
+        primary: "#0A3828",       // legacy deep green (kept for gradients)
       },
       fontFamily: {
         display: ["Syne", "sans-serif"],

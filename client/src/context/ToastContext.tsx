@@ -43,9 +43,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               className={`p-4 rounded-2xl border pointer-events-auto flex items-center gap-3 shadow-2xl ${
-                t.type === 'success' ? 'bg-[#0D0D0D] border-accent/20 text-accent' :
-                t.type === 'error' ? 'bg-[#0D0D0D] border-hot/20 text-hot' :
-                'bg-[#0D0D0D] border-white/10 text-text-primary'
+                t.type === 'success' ? 'bg-background border-accent/20 text-accent' :
+                t.type === 'error' ? 'bg-background border-danger/20 text-danger' :
+                'bg-background border-white/10 text-text-primary'
               }`}
             >
               <div className="flex-shrink-0">

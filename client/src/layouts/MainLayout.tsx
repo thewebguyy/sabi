@@ -25,19 +25,19 @@ const TopBar: React.FC = () => {
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0A0A0A]/90 backdrop-blur-md border-b border-[#262626] px-4 py-3 flex justify-between items-center h-16">
+    <header className="sticky top-0 z-40 w-full glass px-4 py-3 flex justify-between items-center h-16">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-xl bg-[#FFB020]/15 border border-[#FFB020]/30 flex items-center justify-center text-[#FFB020] font-black text-sm">
+        <div className="w-8 h-8 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent font-black text-sm">
           S
         </div>
-        <h1 className="text-lg font-bold text-[#F3F2EF] truncate max-w-[200px]">
+        <h1 className="text-lg font-display font-extrabold text-text-primary truncate max-w-[200px]">
           {getPageTitle()}
         </h1>
       </div>
       
       <NavLink 
         to="/capture" 
-        className="flex items-center gap-1.5 bg-[#FFB020] text-[#0A0A0A] font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition-all shadow-[0_0_15px_rgba(255,176,32,0.2)]"
+        className="flex items-center gap-1.5 bg-accent text-background font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition-all shadow-[0_0_15px_rgba(255,176,32,0.2)]"
       >
         <PlusCircle size={16} />
         <span>Capture</span>
@@ -54,7 +54,7 @@ const BottomNav: React.FC = () => {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#141414]/95 backdrop-blur-lg border-t border-[#262626] pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 glass safe-p-bottom border-t border-white/5">
       <div className="flex justify-around items-center h-16">
         {navItems.map((item) => (
           <NavLink
@@ -62,7 +62,7 @@ const BottomNav: React.FC = () => {
             to={item.path}
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 flex-1 py-2 relative transition-colors ${
-                isActive ? 'text-[#FFB020]' : 'text-[#8E8E93]'
+                isActive ? 'text-accent' : 'text-text-muted'
               }`
             }
           >
@@ -73,7 +73,7 @@ const BottomNav: React.FC = () => {
                   {isActive && (
                     <motion.div
                       layoutId="nav-indicator"
-                      className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-[#FFB020] rounded-full shadow-[0_0_8px_#FFB020]"
+                      className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_theme(colors.accent)]"
                     />
                   )}
                 </div>
@@ -89,7 +89,7 @@ const BottomNav: React.FC = () => {
 
 export const MainLayout: React.FC = () => {
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#F3F2EF] pb-20 selection:bg-[#FFB020]/20 selection:text-[#FFB020]">
+    <div className="min-h-screen pb-20 selection:bg-accent/20 selection:text-accent">
       <TopBar />
       <main className="p-4 max-w-md mx-auto">
         <Outlet />

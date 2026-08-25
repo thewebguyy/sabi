@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Clipboard, Sparkles, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Clipboard, Sparkles, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore, DEFAULT_FOLLOW_UP_DELAY_HOURS } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
@@ -56,7 +56,7 @@ export const Capture: React.FC = () => {
       const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean)
       
       // Try finding amount (numbers with ₦ or k)
-      const amountMatch = rawText.match(/(?:₦|N|NGN|\b)\s*([0-[#FFB020]0-9,]{3,})/i)
+      const amountMatch = rawText.match(/(?:₦|N|NGN|\b)\s*([0-9,]{3,})/i)
       let parsedAmount = 0
       if (amountMatch) {
         const clean = amountMatch[1].replace(/,/g, '')
@@ -106,8 +106,9 @@ export const Capture: React.FC = () => {
 
       toast('Opportunity saved!', 'success')
       navigate('/today')
-    } catch (err: any) {
-      setError(err.message || 'Failed to save deal. Please try again.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save deal. Please try again.'
+      setError(message)
     } finally {
       setSaving(false)
     }
@@ -118,7 +119,7 @@ export const Capture: React.FC = () => {
       {/* Back button */}
       <button
         onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-xs font-bold text-[#8E8E93] hover:text-[#F3F2EF]"
+        className="flex items-center gap-1.5 text-xs font-bold text-text-muted hover:text-text-primary transition-colors"
       >
         <ArrowLeft size={16} /> Back
       </button>
@@ -126,8 +127,8 @@ export const Capture: React.FC = () => {
       {!showConfirm ? (
         <div className="space-y-5">
           <div className="space-y-1">
-            <h2 className="text-2xl font-extrabold text-[#F3F2EF]">Capture Conversation</h2>
-            <p className="text-xs text-[#8E8E93]">
+            <h2 className="text-2xl font-extrabold text-text-primary font-display">Capture Conversation</h2>
+            <p className="text-xs text-text-muted">
               Paste raw WhatsApp or Instagram chat text to extract deal details.
             </p>
           </div>
@@ -136,11 +137,8 @@ export const Capture: React.FC = () => {
             <div className="relative">
               <textarea
                 rows={7}
-                placeholder="Paste WhatsApp transcript here... e.g.
-Ada: Hi, how much is the brown dress?
-Vendor: It is ₦85,000.
-Ada: Okay I will take it, deliver to Lekki on Friday."
-                className="w-full bg-[#141414] border border-[#262626] rounded-2xl p-4 text-xs text-[#F3F2EF] placeholder:text-[#8E8E93]/40 outline-none focus:border-[#FFB020]/50 transition-all resize-none leading-relaxed"
+                placeholder={`Paste WhatsApp transcript here... e.g.\nAda: Hi, how much is the brown dress?\nVendor: It is ₦85,000.\nAda: Okay I will take it, deliver to Lekki on Friday.`}
+                className="w-full bg-surface border border-surface-border rounded-2xl p-4 text-xs text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/50 transition-all resize-none leading-relaxed font-body"
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
               />
@@ -150,7 +148,7 @@ Ada: Okay I will take it, deliver to Lekki on Friday."
               <button
                 type="button"
                 onClick={handlePasteClipboard}
-                className="flex-1 bg-[#262626] text-[#F3F2EF] font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
+                className="flex-1 bg-surface-2 text-text-primary font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
                 <Clipboard size={16} />
                 <span>Paste Clipboard</span>
@@ -161,10 +159,10 @@ Ada: Okay I will take it, deliver to Lekki on Friday."
           <button
             onClick={handleExtract}
             disabled={!rawText.trim() || extracting}
-            className="w-full bg-[#FFB020] text-[#0A0A0A] font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(255,176,32,0.2)]"
+            className="w-full bg-accent text-background font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(255,176,32,0.2)]"
           >
             {extracting ? (
-              <div className="w-6 h-6 border-3 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-3 border-background border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
                 <Sparkles size={20} />
@@ -179,64 +177,64 @@ Ada: Okay I will take it, deliver to Lekki on Friday."
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           onSubmit={handleSaveDeal}
-          className="bg-[#141414] border border-[#262626] rounded-3xl p-6 space-y-5"
+          className="bg-surface border border-surface-border rounded-3xl p-6 space-y-5"
         >
-          <div className="flex items-center gap-2 pb-3 border-b border-[#262626]">
-            <Sparkles size={20} className="text-[#FFB020]" />
+          <div className="flex items-center gap-2 pb-3 border-b border-surface-border">
+            <Sparkles size={20} className="text-accent" />
             <div>
-              <h3 className="text-base font-bold text-[#F3F2EF]">I found a potential sale</h3>
-              <p className="text-xs text-[#8E8E93]">Verify details before saving</p>
+              <h3 className="text-base font-bold text-text-primary">I found a potential sale</h3>
+              <p className="text-xs text-text-muted">Verify details before saving</p>
             </div>
           </div>
 
           {error && (
-            <div className="p-3 bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl text-[#EF4444] text-xs font-medium">
+            <div className="p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-xs font-medium">
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
                 Customer Name
               </label>
               <input
                 required
                 type="text"
-                className="w-full bg-[#0A0A0A] border border-[#262626] rounded-xl py-3 px-3.5 text-xs text-[#F3F2EF] outline-none focus:border-[#FFB020]/50"
+                className="w-full bg-background border border-surface-border rounded-xl py-3 px-3.5 text-xs text-text-primary outline-none focus:border-accent/50 font-body"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
                 Customer Phone (Optional)
               </label>
               <input
                 type="tel"
                 placeholder="+234..."
-                className="w-full bg-[#0A0A0A] border border-[#262626] rounded-xl py-3 px-3.5 text-xs text-[#F3F2EF] outline-none focus:border-[#FFB020]/50"
+                className="w-full bg-background border border-surface-border rounded-xl py-3 px-3.5 text-xs text-text-primary outline-none focus:border-accent/50 font-body"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
                 Product / Service Title
               </label>
               <input
                 required
                 type="text"
-                className="w-full bg-[#0A0A0A] border border-[#262626] rounded-xl py-3 px-3.5 text-xs text-[#F3F2EF] outline-none focus:border-[#FFB020]/50"
+                className="w-full bg-background border border-surface-border rounded-xl py-3 px-3.5 text-xs text-text-primary outline-none focus:border-accent/50 font-body"
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
                 Amount (₦)
               </label>
               <input
@@ -244,20 +242,20 @@ Ada: Okay I will take it, deliver to Lekki on Friday."
                 type="number"
                 min="0"
                 step="500"
-                className="w-full bg-[#0A0A0A] border border-[#262626] rounded-xl py-3 px-3.5 text-xs font-mono font-bold text-[#FFB020] outline-none focus:border-[#FFB020]/50"
+                className="w-full bg-background border border-surface-border rounded-xl py-3 px-3.5 text-xs font-mono font-bold text-accent outline-none focus:border-accent/50"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider">
+              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
                 Constraint / Note (Optional)
               </label>
               <input
                 type="text"
                 placeholder="e.g. Needs delivery by Friday"
-                className="w-full bg-[#0A0A0A] border border-[#262626] rounded-xl py-3 px-3.5 text-xs text-[#F3F2EF] outline-none focus:border-[#FFB020]/50"
+                className="w-full bg-background border border-surface-border rounded-xl py-3 px-3.5 text-xs text-text-primary outline-none focus:border-accent/50 font-body"
                 value={constraint}
                 onChange={(e) => setConstraint(e.target.value)}
               />
@@ -268,17 +266,17 @@ Ada: Okay I will take it, deliver to Lekki on Friday."
             <button
               type="button"
               onClick={() => setShowConfirm(false)}
-              className="flex-1 bg-[#262626] text-[#F3F2EF] font-bold py-3.5 rounded-2xl text-xs active:scale-95 transition-all"
+              className="flex-1 bg-surface-2 text-text-primary font-bold py-3.5 rounded-2xl text-xs active:scale-95 transition-all"
             >
               Re-edit Text
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-[#10B981] text-[#0A0A0A] font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-50"
+              className="flex-1 bg-success text-background font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] disabled:opacity-50"
             >
               {saving ? (
-                <div className="w-5 h-5 border-2 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-background border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
                   <CheckCircle2 size={16} />

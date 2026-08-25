@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono&family=Syne:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -16,6 +16,7 @@ body {
 h1, h2, h3, h4, .font-syne {
   @apply font-display;
 }
+
 /* Custom Scrollbar for Dark Theme */
 ::-webkit-scrollbar {
   width: 8px;
@@ -37,7 +38,6 @@ h1, h2, h3, h4, .font-syne {
 /* Glassmorphism utility */
 .glass {
   @apply bg-surface bg-opacity-70 border border-white border-opacity-10;
-  /* Reduced blur for performance on low-end devices */
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -53,7 +53,7 @@ h1, h2, h3, h4, .font-syne {
     display: none;
   }
   .no-scrollbar {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
