@@ -17,8 +17,9 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
   if (!initialized || loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
-        <div className="w-8 h-8 border-3 border-[#FFB020] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <div className="w-8 h-8 border-3 border-accent border-t-transparent rounded-full animate-spin" />
+        <p className="text-text-muted text-xs">Loading Sabi…</p>
       </div>
     )
   }
@@ -29,11 +30,27 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 }
 
 function App() {
-  const { initialize } = useStore()
+  const { initialize, initialized, loading } = useStore()
 
   useEffect(() => {
     initialize()
   }, [])
+
+  // Safety valve: if initialization hangs for 8s (stale token, unreachable Supabase),
+  // clear persisted state and let the user re-auth.
+  useEffect(() => {
+    if (initialized || !loading) return
+
+    const timeout = setTimeout(() => {
+      const state = useStore.getState()
+      if (!state.initialized || state.loading) {
+        console.warn('[Sabi] Initialization timed out — clearing stale session.')
+        useStore.setState({ user: null, token: null, initialized: true, loading: false })
+      }
+    }, 8000)
+
+    return () => clearTimeout(timeout)
+  }, [initialized, loading])
 
   return (
     <ErrorBoundary>
@@ -52,7 +69,7 @@ function App() {
 
             {/* Protected — full screen modal/action routes */}
             <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-              <Route path="/capture" element={<div className="min-h-screen bg-[#0A0A0A] text-[#F3F2EF] p-4 max-w-md mx-auto"><Capture /></div>} />
+              <Route path="/capture" element={<div className="min-h-screen bg-background text-text-primary p-4 max-w-md mx-auto"><Capture /></div>} />
             </Route>
 
             {/* Default / Fallbacks */}
