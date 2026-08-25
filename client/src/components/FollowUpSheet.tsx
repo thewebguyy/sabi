@@ -43,8 +43,8 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
   }
 
   const getFallbackMessage = () => {
-    const name = deal.contacts?.name?.split(' ')[0] || 'there'
-    const product = deal.title
+    const name = deal.customer_name?.split(' ')[0] || 'there'
+    const product = deal.product_name
     return `Hi ${name}! Just checking in on the ${product}. Are you still interested? Let me know if you have any questions 😊`
   }
 
@@ -60,8 +60,7 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
       }, {
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
       })
-      // Update last_contact_time
-      await updateDeal(deal.id, { last_contact_time: new Date().toISOString() })
+      await updateDeal(deal.id, { last_vendor_contact_at: new Date().toISOString() })
       setSent(true)
       setTimeout(onClose, 1200)
     } catch (err: any) {
@@ -80,15 +79,15 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
       const res = await axios.post(`${apiUrl}/api/payments/generate-link`, {
         deal_id: deal.id,
         amount: deal.amount,
-        customer_phone: deal.contacts?.phone
+        customer_phone: deal.customer_phone
       }, {
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
       })
       const paymentUrl = res.data.payment_url;
-      const name = deal.contacts?.name?.split(' ')[0] || 'there';
-      const text = `Hi ${name}! Here's your payment link for ${deal.title}:\n${paymentUrl} — ₦${deal.amount}`;
+      const name = deal.customer_name?.split(' ')[0] || 'there';
+      const text = `Hi ${name}! Here's your payment link for ${deal.product_name}:\n${paymentUrl} — ₦${deal.amount}`;
       const encoded = encodeURIComponent(text);
-      const phone = deal.contacts?.phone ? deal.contacts.phone.replace(/\D/g, '') : '';
+      const phone = deal.customer_phone ? deal.customer_phone.replace(/\D/g, '') : '';
       window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
       onClose();
     } catch (err: any) {
@@ -125,7 +124,7 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
           </div>
 
           <p className="text-sm text-text-muted mb-4">
-            Suggested message to <span className="text-text-primary font-bold">{deal.contacts?.name || 'customer'}:</span>
+            Suggested message to <span className="text-text-primary font-bold">{deal.customer_name || 'customer'}:</span>
           </p>
 
           {/* Message Block */}

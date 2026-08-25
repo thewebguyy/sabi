@@ -1,54 +1,33 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
+import { Profile, Deal, DealStatus } from '../types'
 
-export interface User {
-  id: string;
-  phone: string;
-  business_name: string;
-  currency: string;
-  has_seeded: boolean;
-  whatsapp_connected: boolean;
-  whatsapp_phone_id?: string;
-  follow_up_hours: number;
-  notification_preferences: { summary: boolean; ghosting: boolean; payments: boolean };
-  created_at: string;
-}
-
-export interface Deal {
-  id: string;
-  user_id: string;
-  contact_id: string;
-  title: string;
-  amount: number;
-  currency: string;
-  status: 'inquiry' | 'pending' | 'waiting_payment' | 'paid' | 'ghosted';
-  summary: string;
-  customer_constraint: string;
-  ai_suggested_reply: string;
-  last_contact_time: string;
-  created_at: string;
-  updated_at: string;
-  contacts?: { name: string; phone: string; trust_score: number };
-}
+export type { Deal, Profile, DealStatus }
+export const DEFAULT_FOLLOW_UP_DELAY_HOURS = 48;
 
 interface SabiState {
-  user: User | null;
+  user: Profile | null;
   token: string | null;
   loading: boolean;
   initialized: boolean;
   deals: Deal[];
-  channel: any | null;
-  setUser: (user: User | null) => void;
+  channel: ReturnType<typeof supabase.channel> | null;
+  
+  // Auth Actions
+  setUser: (user: Profile | null) => void;
   initialize: () => Promise<void>;
-  subscribeToDeals: (userId: string) => void;
-  authenticateWithPhone: (phone: string, otp: string, token: string) => Promise<void>;
-  fetchDeals: () => Promise<void>;
-  updateDeal: (id: string, updates: Partial<Deal>) => Promise<void>;
-  markPaid: (id: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateUser: (updates: Partial<User>) => Promise<void>;
-  seedDemoData: (userId: string) => Promise<void>;
+  updateProfile: (updates: Partial<Profile>) => Promise<void>;
+
+  // Deal Actions
+  fetchDeals: () => Promise<void>;
+  subscribeToDeals: (userId: string) => void;
+  createDeal: (dealData: Omit<Deal, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<Deal | null>;
+  updateDeal: (id: string, updates: Partial<Deal>) => Promise<void>;
+  markWon: (id: string) => Promise<void>;
+  markLost: (id: string) => Promise<void>;
+  recordVendorContact: (id: string) => Promise<void>;
 }
 
 export const useStore = create<SabiState>()(
@@ -76,14 +55,23 @@ export const useStore = create<SabiState>()(
             set({ user: null, token: null, initialized: true, loading: false })
             return
           }
-          const { data: profile } = await supabase.from('users').select('*').eq('id', authUser.id).single()
+          let { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).maybeSingle()
+          if (!profile) {
+            // Auto-create profile if missing
+            const { data: newProfile } = await supabase
+              .from('profiles')
+              .insert([{ id: authUser.id, currency: 'NGN' }])
+              .select()
+              .single()
+            profile = newProfile
+          }
           if (profile) {
             set({ user: profile })
-            if (!profile.has_seeded) await get().seedDemoData(authUser.id)
             await get().fetchDeals()
             get().subscribeToDeals(authUser.id)
           }
-        } catch {
+        } catch (err) {
+          console.error('[Store Initialize Error]', err)
           set({ user: null, token: null })
         } finally {
           set({ initialized: true, loading: false })
@@ -94,82 +82,155 @@ export const useStore = create<SabiState>()(
         if (get().channel) return
         const channel = supabase
           .channel(`deals-${userId}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'deals', filter: `user_id=eq.${userId}` }, (payload: any) => {
-            const curr = [...get().deals]
-            if (payload.eventType === 'INSERT') {
-              supabase.from('deals').select('*, contacts(*)').eq('id', payload.new.id).single()
-                .then(({ data }) => { if (data) set({ deals: [data as Deal, ...get().deals] }) })
-            } else if (payload.eventType === 'UPDATE') {
-              const idx = curr.findIndex(d => d.id === payload.new.id)
-              if (idx !== -1) { curr[idx] = { ...curr[idx], ...payload.new }; set({ deals: curr }) }
-            } else if (payload.eventType === 'DELETE') {
-              set({ deals: curr.filter(d => d.id !== payload.old.id) })
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'deals', filter: `user_id=eq.${userId}` },
+            (payload: any) => {
+              const currentDeals = [...get().deals]
+              if (payload.eventType === 'INSERT') {
+                set({ deals: [payload.new as Deal, ...currentDeals] })
+              } else if (payload.eventType === 'UPDATE') {
+                const idx = currentDeals.findIndex(d => d.id === payload.new.id)
+                if (idx !== -1) {
+                  currentDeals[idx] = { ...currentDeals[idx], ...payload.new }
+                  set({ deals: currentDeals })
+                }
+              } else if (payload.eventType === 'DELETE') {
+                set({ deals: currentDeals.filter(d => d.id !== payload.old.id) })
+              }
             }
-          }).subscribe()
+          )
+          .subscribe()
         set({ channel })
-      },
-
-      authenticateWithPhone: async (_phone, _otp, token) => {
-        set({ loading: true })
-        try {
-          const { data: { user: authUser } } = await supabase.auth.getUser(token)
-          if (!authUser) throw new Error('Invalid token')
-          const { data: profile } = await supabase.from('users').select('*').eq('id', authUser.id).single()
-          set({ user: profile, token })
-          if (profile && !profile.has_seeded) await get().seedDemoData(authUser.id)
-          await get().fetchDeals()
-          get().subscribeToDeals(authUser.id)
-        } finally {
-          set({ loading: false })
-        }
       },
 
       fetchDeals: async () => {
         const { user } = get()
         if (!user) return
-        const { data } = await supabase
-          .from('deals').select('*, contacts(*)')
-          .eq('user_id', user.id).neq('status', 'paid')
-          .order('last_contact_time', { ascending: false })
+        const { data, error } = await supabase
+          .from('deals')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('follow_up_due_at', { ascending: true })
+        
+        if (error) {
+          console.error('[Fetch Deals Error]', error.message)
+          return
+        }
         set({ deals: (data || []) as Deal[] })
       },
 
+      createDeal: async (dealData) => {
+        const { user } = get()
+        if (!user) return null
+        const now = new Date().toISOString()
+        const { data, error } = await supabase
+          .from('deals')
+          .insert([{
+            ...dealData,
+            user_id: user.id,
+            captured_at: now,
+            created_at: now,
+            updated_at: now
+          }])
+          .select()
+          .single()
+
+        if (error) {
+          console.error('[Create Deal Error]', error.message)
+          throw error
+        }
+
+        // Log activity
+        await supabase.from('activities').insert([{
+          user_id: user.id,
+          deal_id: data.id,
+          activity_type: 'captured'
+        }])
+
+        const updatedDeals = [data as Deal, ...get().deals]
+        set({ deals: updatedDeals })
+        return data as Deal
+      },
+
       updateDeal: async (id, updates) => {
-        const { error } = await supabase.from('deals')
-          .update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id)
-        if (!error) {
-          set({ deals: get().deals.map(d => d.id === id ? { ...d, ...updates } : d) })
+        const now = new Date().toISOString()
+        const { error } = await supabase
+          .from('deals')
+          .update({ ...updates, updated_at: now })
+          .eq('id', id)
+        
+        if (error) {
+          console.error('[Update Deal Error]', error.message)
+          throw error
+        }
+
+        set({
+          deals: get().deals.map(d => d.id === id ? { ...d, ...updates, updated_at: now } : d)
+        })
+      },
+
+      markWon: async (id) => {
+        const { user } = get()
+        const now = new Date().toISOString()
+        await get().updateDeal(id, { status: 'won', won_at: now })
+        
+        if (user) {
+          await supabase.from('activities').insert([{
+            user_id: user.id,
+            deal_id: id,
+            activity_type: 'won'
+          }])
         }
       },
 
-      markPaid: async (id) => {
-        await get().updateDeal(id, { status: 'paid' })
-        setTimeout(() => {
-          set({ deals: get().deals.filter(d => d.id !== id) })
-        }, 1500)
+      markLost: async (id) => {
+        const { user } = get()
+        const now = new Date().toISOString()
+        await get().updateDeal(id, { status: 'lost', lost_at: now })
+
+        if (user) {
+          await supabase.from('activities').insert([{
+            user_id: user.id,
+            deal_id: id,
+            activity_type: 'lost'
+          }])
+        }
       },
 
-      updateUser: async (updates) => {
+      recordVendorContact: async (id) => {
+        const { user } = get()
+        const now = new Date().toISOString()
+        // Reset follow_up_due_at by default delay hours
+        const nextDue = new Date(Date.now() + DEFAULT_FOLLOW_UP_DELAY_HOURS * 3600 * 1000).toISOString()
+
+        await get().updateDeal(id, {
+          last_vendor_contact_at: now,
+          follow_up_due_at: nextDue
+        })
+
+        if (user) {
+          await supabase.from('activities').insert([{
+            user_id: user.id,
+            deal_id: id,
+            activity_type: 'followup_sent'
+          }])
+        }
+      },
+
+      updateProfile: async (updates) => {
         const { user } = get()
         if (!user) return
-        const { data, error } = await supabase.from('users').update(updates).eq('id', user.id).select().single()
-        if (!error && data) set({ user: data })
-      },
-
-      seedDemoData: async (userId: string) => {
-        try {
-          const { data: contact } = await supabase.from('contacts')
-            .insert([{ user_id: userId, name: 'Chidinma O.', phone: '+2348000000001', last_seen: new Date() }])
-            .select().single()
-          if (!contact) return
-          const ago = (d: number) => new Date(Date.now() - d * 86400000).toISOString()
-          await supabase.from('deals').insert([
-            { user_id: userId, contact_id: contact.id, title: 'Ankara Fabric (6 yards)', amount: 15000, status: 'pending', summary: 'Wants delivery before weekend', last_contact_time: ago(3) },
-            { user_id: userId, contact_id: contact.id, title: 'Gucci Belt', amount: 24500, status: 'inquiry', summary: 'Asking about authenticity', last_contact_time: ago(1) },
-            { user_id: userId, contact_id: contact.id, title: 'Nike AF1 (Size 42)', amount: 45000, status: 'waiting_payment', summary: 'Said will pay today', last_contact_time: ago(5) },
-          ])
-          await supabase.from('users').update({ has_seeded: true }).eq('id', userId)
-        } catch (err) { console.error('Seed error:', err) }
+        const { data, error } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', user.id)
+          .select()
+          .single()
+        
+        if (!error && data) {
+          set({ user: data as Profile })
+        }
       },
 
       signOut: async () => {
@@ -180,7 +241,7 @@ export const useStore = create<SabiState>()(
       }
     }),
     {
-      name: 'sabi-crm-store',
+      name: 'sabi-store',
       partialize: (state) => ({ token: state.token, user: state.user }),
     }
   )

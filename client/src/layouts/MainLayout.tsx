@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { LayoutGrid, TrendingUp, Settings } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { Clock, Layers, Settings, PlusCircle } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useStore } from '../store/useStore'
 
 const TopBar: React.FC = () => {
@@ -10,36 +10,51 @@ const TopBar: React.FC = () => {
 
   const getPageTitle = () => {
     switch (location.pathname) {
-      case '/deals': return user?.business_name || 'Sabi CRM'
-      case '/revenue': return 'Revenue'
-      case '/settings': return 'Settings'
+      case '/today':
+        return user?.business_name || 'Sabi'
+      case '/deals':
+        return 'All Opportunities'
+      case '/settings':
+        return 'Settings'
+      case '/capture':
+        return 'Capture Conversation'
       default:
-        if (location.pathname.startsWith('/deals/')) return 'Deal Details'
+        if (location.pathname.startsWith('/deals/')) return 'Opportunity Details'
         return 'Sabi'
     }
   }
 
   return (
-    <div className="sticky top-0 z-40 w-full glass px-4 py-4 flex justify-between items-center h-16">
-      <h1 className="text-xl font-syne font-extrabold text-white truncate max-w-[70%]">
-        {getPageTitle()}
-      </h1>
-      <div className="w-9 h-9 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-accent font-extrabold text-sm">
-        {user?.business_name?.[0]?.toUpperCase() || 'S'}
+    <header className="sticky top-0 z-40 w-full bg-[#0A0A0A]/90 backdrop-blur-md border-b border-[#262626] px-4 py-3 flex justify-between items-center h-16">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-xl bg-[#FFB020]/15 border border-[#FFB020]/30 flex items-center justify-center text-[#FFB020] font-black text-sm">
+          S
+        </div>
+        <h1 className="text-lg font-bold text-[#F3F2EF] truncate max-w-[200px]">
+          {getPageTitle()}
+        </h1>
       </div>
-    </div>
+      
+      <NavLink 
+        to="/capture" 
+        className="flex items-center gap-1.5 bg-[#FFB020] text-[#0A0A0A] font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition-all shadow-[0_0_15px_rgba(255,176,32,0.2)]"
+      >
+        <PlusCircle size={16} />
+        <span>Capture</span>
+      </NavLink>
+    </header>
   )
 }
 
 const BottomNav: React.FC = () => {
   const navItems = [
-    { icon: <LayoutGrid />, label: 'Deals', path: '/deals' },
-    { icon: <TrendingUp />, label: 'Revenue', path: '/revenue' },
+    { icon: <Clock />, label: 'Today', path: '/today' },
+    { icon: <Layers />, label: 'Deals', path: '/deals' },
     { icon: <Settings />, label: 'Settings', path: '/settings' },
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 glass safe-p-bottom border-t border-white/5">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#141414]/95 backdrop-blur-lg border-t border-[#262626] pb-safe">
       <div className="flex justify-around items-center h-16">
         {navItems.map((item) => (
           <NavLink
@@ -47,7 +62,7 @@ const BottomNav: React.FC = () => {
             to={item.path}
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 flex-1 py-2 relative transition-colors ${
-                isActive ? 'text-accent' : 'text-text-muted'
+                isActive ? 'text-[#FFB020]' : 'text-[#8E8E93]'
               }`
             }
           >
@@ -57,12 +72,12 @@ const BottomNav: React.FC = () => {
                   {React.cloneElement(item.icon as React.ReactElement, { size: 22 })}
                   {isActive && (
                     <motion.div
-                      layoutId="nav-dot"
-                      className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-accent rounded-full"
+                      layoutId="nav-indicator"
+                      className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-[#FFB020] rounded-full shadow-[0_0_8px_#FFB020]"
                     />
                   )}
                 </div>
-                <span className="text-[10px] font-bold">{item.label}</span>
+                <span className="text-[11px] font-medium tracking-tight">{item.label}</span>
               </>
             )}
           </NavLink>
@@ -74,12 +89,10 @@ const BottomNav: React.FC = () => {
 
 export const MainLayout: React.FC = () => {
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen bg-[#0A0A0A] text-[#F3F2EF] pb-20 selection:bg-[#FFB020]/20 selection:text-[#FFB020]">
       <TopBar />
-      <main className="p-4">
-        <AnimatePresence mode="wait">
-          <Outlet />
-        </AnimatePresence>
+      <main className="p-4 max-w-md mx-auto">
+        <Outlet />
       </main>
       <BottomNav />
     </div>

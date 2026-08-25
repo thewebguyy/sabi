@@ -1,102 +1,83 @@
--- Create the tables as specified in the schema.
+-- Sabi MVP Database Schema
+-- Locked Architecture: Sales Memory & Revenue Recovery Engine
 
--- 1. Users Table
-CREATE TABLE IF NOT EXISTS public.users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone TEXT UNIQUE NOT NULL,
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. Profiles Table (Linked to Supabase Auth)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     business_name TEXT,
-    currency TEXT DEFAULT 'NGN',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    whatsapp_connected BOOLEAN DEFAULT false,
-    plan TEXT DEFAULT 'free', -- 'free' | 'grind' | 'sabi_pro'
-    has_seeded BOOLEAN DEFAULT false,
-    notification_preferences JSONB DEFAULT '{"summary": true, "ghosting": true, "payments": true}'::jsonb
+    currency TEXT DEFAULT 'NGN' NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 1.1 OTP Codes Table (for persistent across instances)
-CREATE TABLE IF NOT EXISTS public.otp_codes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone TEXT NOT NULL,
-    code TEXT NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-CREATE INDEX IF NOT EXISTS idx_otp_phone ON public.otp_codes(phone);
-
--- 2. Contacts Table
-CREATE TABLE IF NOT EXISTS public.contacts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
-    whatsapp_id TEXT,
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    trust_score INT DEFAULT 50 CHECK (trust_score >= 0 AND trust_score <= 100),
-    last_seen TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-
--- 3. Deals Table
+-- 2. Deals Table (The Core Revenue Engine)
 CREATE TABLE IF NOT EXISTS public.deals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
-    contact_id UUID REFERENCES public.contacts(id) ON DELETE CASCADE NOT NULL,
-    title TEXT NOT NULL, -- AI-extracted item name
-    amount NUMERIC DEFAULT 0,
-    currency TEXT DEFAULT 'NGN',
-    status TEXT DEFAULT 'inquiry', -- 'inquiry' | 'pending' | 'waiting_payment' | 'paid' | 'ghosted'
-    summary TEXT, -- AI-generated 1-line summary of the chat
-    customer_constraint TEXT, -- e.g. "needs it by Friday"
-    ai_suggested_reply TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    customer_name TEXT NOT NULL,
+    customer_phone TEXT,
+    product_name TEXT NOT NULL,
+    amount NUMERIC(12, 2) DEFAULT 0.00 NOT NULL CHECK (amount >= 0),
+    currency TEXT DEFAULT 'NGN' NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('open', 'won', 'lost')) DEFAULT 'open',
+    customer_constraint TEXT,
+    captured_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    last_vendor_contact_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    last_customer_response_at TIMESTAMPTZ,
+    follow_up_due_at TIMESTAMPTZ NOT NULL,
+    won_at TIMESTAMPTZ,
+    lost_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 4. Reminders Table
-CREATE TABLE IF NOT EXISTS public.reminders (
+-- 3. Activities Table (Minimal Audit Trail for Core Loop)
+CREATE TABLE IF NOT EXISTS public.activities (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     deal_id UUID REFERENCES public.deals(id) ON DELETE CASCADE NOT NULL,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
-    trigger_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    message TEXT NOT NULL,
-    is_sent BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+    activity_type TEXT NOT NULL CHECK (activity_type IN ('captured', 'followup_copied', 'followup_sent', 'won', 'lost')),
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 5. Payments Table
-CREATE TABLE IF NOT EXISTS public.payments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    deal_id UUID REFERENCES public.deals(id) ON DELETE CASCADE NOT NULL,
-    amount NUMERIC NOT NULL,
-    proof_image_url TEXT,
-    verified_status TEXT DEFAULT 'pending', -- 'pending' | 'verified' | 'rejected'
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+-- Indexes for lightning-fast queries on Today Queue
+CREATE INDEX IF NOT EXISTS idx_deals_user_status_due ON public.deals(user_id, status, follow_up_due_at);
+CREATE INDEX IF NOT EXISTS idx_activities_user_deal ON public.activities(user_id, deal_id);
 
--- 6. Chat Messages Table
-CREATE TABLE IF NOT EXISTS public.chat_messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
-    contact_id UUID REFERENCES public.contacts(id) ON DELETE CASCADE NOT NULL,
-    deal_id UUID REFERENCES public.deals(id) ON DELETE CASCADE,
-    body TEXT NOT NULL,
-    direction TEXT NOT NULL, -- 'inbound' | 'outbound'
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-
--- Enable Row Level Security (RLS) on all tables.
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
+-- Enable Row Level Security (RLS) on all tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.otp_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 
--- Basic RLS Policies (Allow access to own records)
--- No public access policies for otp_codes, server uses service role.
-CREATE POLICY "Users can only see their own data" ON public.users FOR ALL USING (auth.uid() = id);
-CREATE POLICY "Contacts can only see their own user's data" ON public.contacts FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Deals can only see their own user's data" ON public.deals FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Reminders can only see their own user's data" ON public.reminders FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Payments can only see their own user's data" ON public.payments FOR ALL USING (auth.uid() = (SELECT user_id FROM deals WHERE id = deal_id));
-CREATE POLICY "Messages can only see their own user's data" ON public.chat_messages FOR ALL USING (auth.uid() = user_id);
+-- 1. Profiles RLS Policies
+CREATE POLICY "Users can view own profile" ON public.profiles
+    FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON public.profiles
+    FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile" ON public.profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- 2. Deals RLS Policies
+CREATE POLICY "Users can view own deals" ON public.deals
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own deals" ON public.deals
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own deals" ON public.deals
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own deals" ON public.deals
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- 3. Activities RLS Policies
+CREATE POLICY "Users can view own activities" ON public.activities
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own activities" ON public.activities
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+

@@ -1,235 +1,130 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ExternalLink, CheckCircle2, Clock, MessageSquare, Link2 } from 'lucide-react'
+import { ArrowLeft, ExternalLink, CheckCircle2, XCircle, Clock, MessageSquare, AlertCircle } from 'lucide-react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import confetti from 'canvas-confetti'
-import { useStore, Deal } from '../store/useStore'
-import { supabase } from '../lib/supabase'
-import FollowUpSheet from '../components/FollowUpSheet'
-import { getWhatsAppLink } from '../lib/utils'
-import axios from 'axios'
-
-const timeAgo = (dateStr: string): string => {
-  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
-  if (days === 0) return 'Today'
-  if (days === 1) return '1 day'
-  return `${days} days`
-}
+import { useStore } from '../store/useStore'
+import { Deal } from '../types'
 
 const formatNaira = (amount: number) => {
-  if (!amount) return '₦?'
-  return `₦${amount.toLocaleString()}`
-}
-
-const statusLabel: Record<string, { label: string; color: string }> = {
-  inquiry: { label: 'New Inquiry', color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' },
-  pending: { label: 'In Progress', color: 'text-accent bg-accent/10 border-accent/20' },
-  waiting_payment: { label: 'Waiting Payment', color: 'text-blue-400 bg-blue-400/10 border-blue-400/20' },
-  paid: { label: 'Paid ✓', color: 'text-success bg-success/10 border-success/20' },
-  ghosted: { label: 'Ghosted', color: 'text-text-muted bg-white/5 border-white/10' },
+  return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount || 0)
 }
 
 const DealDetail: React.FC = () => {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { deals, markPaid, updateDeal } = useStore()
+  const { deals, markWon, markLost, recordVendorContact } = useStore()
   const [deal, setDeal] = useState<Deal | null>(null)
   const [loading, setLoading] = useState(true)
-  const [followUpOpen, setFollowUpOpen] = useState(false)
-  const [savingNote, setSavingNote] = useState(false)
-  const [generatingLink, setGeneratingLink] = useState(false)
-  const [note, setNote] = useState('')
-  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const fromStore = deals.find(d => d.id === id)
-    if (fromStore) {
-      setDeal(fromStore)
-      setNote(fromStore.summary || '')
-      setLoading(false)
-      return
+    const found = deals.find(d => d.id === id)
+    if (found) {
+      setDeal(found)
     }
-    // Fallback: fetch from Supabase
-    supabase.from('deals').select('*, contacts(*)').eq('id', id).single()
-      .then(({ data }) => {
-        if (data) {
-          setDeal(data as Deal)
-          setNote(data.summary || '')
-        }
-        setLoading(false)
-      })
+    setLoading(false)
   }, [id, deals])
-
-  const handleMarkPaid = async () => {
-    if (!deal || deal.status === 'paid') return
-    await markPaid(deal.id)
-    setDeal(prev => prev ? { ...prev, status: 'paid' } : prev)
-    confetti({
-      particleCount: 150,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#25D366', '#0A3828', '#FF6B35']
-    })
-    setTimeout(() => navigate('/deals'), 1500)
-  }
-
-  const handleNoteChange = (val: string) => {
-    setNote(val)
-    if (noteTimer.current) clearTimeout(noteTimer.current)
-    noteTimer.current = setTimeout(async () => {
-      if (!deal) return
-      setSavingNote(true)
-      await updateDeal(deal.id, { summary: val })
-      setSavingNote(false)
-    }, 800)
-  }
-
-  const handlePaymentLink = async () => {
-    if (!deal) return;
-    setGeneratingLink(true);
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await axios.post(`${apiUrl}/api/payments/generate-link`, {
-        deal_id: deal.id,
-        amount: deal.amount,
-        customer_phone: deal.contacts?.phone
-      }, {
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
-      })
-      const paymentUrl = res.data.payment_url;
-      const name = deal.contacts?.name?.split(' ')[0] || 'there';
-      const text = `Hi ${name}! Here's your payment link for ${deal.title}:\n${paymentUrl} — ₦${deal.amount}`;
-      const encoded = encodeURIComponent(text);
-      const phone = deal.contacts?.phone ? deal.contacts.phone.replace(/\D/g, '') : '';
-      window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to generate payment link');
-    } finally {
-      setGeneratingLink(false);
-    }
-  }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-3 border-[#FFB020] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!deal) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-text-muted mb-4">Deal not found</p>
-        <Link to="/deals" className="text-accent font-bold">← Back to Deals</Link>
+      <div className="py-20 text-center space-y-4">
+        <p className="text-[#8E8E93] text-sm">Opportunity not found</p>
+        <Link to="/deals" className="text-[#FFB020] font-bold text-xs hover:underline">← Back to All Deals</Link>
       </div>
     )
   }
 
-  const statusInfo = statusLabel[deal.status] || statusLabel.inquiry
-  const daysOpen = timeAgo(deal.created_at)
+  const handleFollowUp = () => {
+    recordVendorContact(deal.id)
+    const msg = `Hi ${deal.customer_name}! Following up on your order for ${deal.product_name} (${formatNaira(deal.amount)}). Let me know if you are ready so I can prepare it!`
+    const encoded = encodeURIComponent(msg)
+    if (deal.customer_phone) {
+      window.open(`https://wa.me/${deal.customer_phone.replace(/\D/g, '')}?text=${encoded}`, '_blank')
+    } else {
+      window.open(`https://wa.me/?text=${encoded}`, '_blank')
+    }
+  }
 
   return (
-    <div className="pb-32">
-      {/* Back */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/deals" className="w-10 h-10 rounded-2xl bg-surface-2 flex items-center justify-center text-text-muted">
-          <ArrowLeft size={20} />
+    <div className="space-y-5 pb-20">
+      {/* Header Back */}
+      <div className="flex items-center gap-3">
+        <Link to="/deals" className="w-9 h-9 rounded-xl bg-[#141414] border border-[#262626] flex items-center justify-center text-[#8E8E93] hover:text-[#F3F2EF]">
+          <ArrowLeft size={18} />
         </Link>
         <div>
-          <h2 className="font-extrabold text-lg leading-none text-text-primary">{deal.contacts?.name || 'Unknown'}</h2>
-          <p className="text-xs text-text-muted mt-0.5">{deal.title}</p>
+          <h2 className="font-bold text-base text-[#F3F2EF]">{deal.customer_name}</h2>
+          <p className="text-xs text-[#8E8E93]">{deal.product_name}</p>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {/* Deal Info Card */}
-        <div className="bg-surface rounded-3xl border border-white/5 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <span className={`text-xs font-extrabold uppercase px-3 py-1 rounded-full border ${statusInfo.color}`}>
-              {statusInfo.label}
-            </span>
-            <span className="text-xs text-text-muted font-bold">{daysOpen} open</span>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest mb-1">Amount</p>
-              <p className="text-2xl font-mono font-extrabold text-accent">{formatNaira(deal.amount)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest mb-1">Status</p>
-              <p className="text-sm font-bold">{statusInfo.label}</p>
-            </div>
-          </div>
+      {/* Main Info Card */}
+      <div className="bg-[#141414] border border-[#262626] rounded-3xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className={`text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
+            deal.status === 'won' ? 'bg-[#10B981]/15 text-[#10B981] border-[#10B981]/30' :
+            deal.status === 'lost' ? 'bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30' :
+            'bg-[#FFB020]/15 text-[#FFB020] border-[#FFB020]/30'
+          }`}>
+            {deal.status}
+          </span>
+          <span className="text-xs text-[#8E8E93]">
+            {new Date(deal.captured_at).toLocaleDateString()}
+          </span>
         </div>
 
-        {/* Notes */}
-        <div className="bg-surface rounded-3xl border border-white/5 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <MessageSquare size={14} className="text-text-muted" />
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-text-muted">Notes</span>
-            </div>
-            {savingNote && <span className="text-[10px] text-text-muted">Saving…</span>}
+        <div>
+          <p className="text-[10px] text-[#8E8E93] font-bold uppercase tracking-wider mb-0.5">Amount</p>
+          <p className="text-3xl font-mono font-extrabold text-[#FFB020]">{formatNaira(deal.amount)}</p>
+        </div>
+
+        {deal.customer_constraint && (
+          <div className="flex items-center gap-2 bg-[#0A0A0A] p-3 rounded-xl border border-[#262626] text-xs text-[#8E8E93]">
+            <AlertCircle size={16} className="text-[#FFB020] shrink-0" />
+            <span>{deal.customer_constraint}</span>
           </div>
-          <textarea
-            className="w-full h-28 bg-surface-2 rounded-2xl border border-white/5 p-4 text-sm text-text-primary outline-none focus:border-accent/40 transition-all resize-none font-body placeholder:text-text-muted/30"
-            placeholder="Add notes about this deal…"
-            value={note}
-            onChange={(e) => handleNoteChange(e.target.value)}
-          />
-        </div>
-
-        {/* Action Buttons */}
-        <div className="space-y-3">
-          <button
-            onClick={() => setFollowUpOpen(true)}
-            className="w-full bg-surface-2 border border-white/5 py-4 rounded-2xl text-sm font-bold text-text-primary flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:border-accent/20"
-          >
-            <Clock size={18} className="text-accent" />
-            Follow Up
-          </button>
-
-          {(deal.status === 'pending' || deal.status === 'waiting_payment') && (
-            <button
-              onClick={handlePaymentLink}
-              disabled={generatingLink}
-              className="w-full bg-surface-2 border border-white/5 py-4 rounded-2xl text-sm font-bold text-text-primary flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:border-accent/20 disabled:opacity-60"
-            >
-              {generatingLink
-                ? <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                : <><Link2 size={18} className="text-accent" /> Send Payment Link</>
-              }
-            </button>
-          )}
-
-          <button
-            onClick={handleMarkPaid}
-            disabled={deal.status === 'paid'}
-            className="w-full bg-surface-2 border border-white/5 py-4 rounded-2xl text-sm font-bold text-text-primary flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:border-accent/20 disabled:opacity-40"
-          >
-            <CheckCircle2 size={18} className="text-accent" />
-            {deal.status === 'paid' ? 'Already Paid ✓' : 'Mark as Paid'}
-          </button>
-
-          <a
-            href={getWhatsAppLink(deal.contacts?.phone || '', deal.ai_suggested_reply || `Hi! Just following up on ${deal.title}`)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full bg-accent text-primary font-extrabold py-4 rounded-2xl text-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-[0_8px_30px_rgba(37,211,102,0.3)]"
-          >
-            Open in WhatsApp
-            <ExternalLink size={18} />
-          </a>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {followUpOpen && (
-          <FollowUpSheet deal={deal} onClose={() => setFollowUpOpen(false)} />
         )}
-      </AnimatePresence>
+      </div>
+
+      {/* Actions */}
+      <div className="space-y-3">
+        {deal.status === 'open' && (
+          <>
+            <button
+              onClick={handleFollowUp}
+              className="w-full bg-[#25D366] text-[#0A0A0A] font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(37,211,102,0.2)]"
+            >
+              <MessageSquare size={16} />
+              <span>Nudge via WhatsApp</span>
+              <ExternalLink size={14} />
+            </button>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => { markWon(deal.id); navigate('/deals') }}
+                className="bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+              >
+                <CheckCircle2 size={16} />
+                <span>Mark Won (₦)</span>
+              </button>
+              <button
+                onClick={() => { markLost(deal.id); navigate('/deals') }}
+                className="bg-[#EF4444]/15 text-[#EF4444] border border-[#EF4444]/30 font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+              >
+                <XCircle size={16} />
+                <span>Mark Lost</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

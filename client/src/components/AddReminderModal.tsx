@@ -105,7 +105,7 @@ const AddReminderModal: React.FC<AddReminderModalProps> = ({ isOpen, onClose, on
                   >
                     <option value="">No Deal</option>
                     {deals.map(d => (
-                      <option key={d.id} value={d.id}>{d.contacts?.name}: {d.title}</option>
+                      <option key={d.id} value={d.id}>{d.customer_name}: {d.product_name}</option>
                     ))}
                   </select>
                </div>

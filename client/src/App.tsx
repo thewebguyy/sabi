@@ -4,12 +4,10 @@ import { useStore } from './store/useStore'
 import { MainLayout } from './layouts/MainLayout'
 
 import Auth from './pages/Auth'
+import Today from './pages/Today'
 import Deals from './pages/Deals'
-import DealDetail from './pages/DealDetail'
-import Revenue from './pages/Revenue'
 import Settings from './pages/Settings'
-import Onboarding from './pages/Onboarding'
-import Connect from './pages/Connect'
+import Capture from './pages/Capture'
 
 import { ToastProvider } from './context/ToastContext'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -19,22 +17,13 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
   if (!initialized || loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-[#FFB020] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!user) return <Navigate to="/auth" replace />
-
-  const hasSkippedConnect = localStorage.getItem('sabi_has_skipped_connect') === 'true'
-  
-  if (!user.whatsapp_connected && !hasSkippedConnect) {
-    // If they're trying to go anywhere else but onboarding or connect, redirect them
-    if (window.location.pathname !== '/onboarding' && window.location.pathname !== '/connect') {
-      return <Navigate to="/onboarding" replace />
-    }
-  }
 
   return children
 }
@@ -53,24 +42,22 @@ function App() {
           <Routes>
             {/* Public */}
             <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<Navigate to="/deals" replace />} />
 
-            {/* Protected — with bottom nav layout */}
+            {/* Protected — with 3-tab bottom nav layout */}
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+              <Route path="/today" element={<Today />} />
               <Route path="/deals" element={<Deals />} />
-              <Route path="/deals/:id" element={<DealDetail />} />
-              <Route path="/revenue" element={<Revenue />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
 
-            {/* Protected — without bottom nav */}
+            {/* Protected — full screen modal/action routes */}
             <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/connect" element={<Connect />} />
+              <Route path="/capture" element={<div className="min-h-screen bg-[#0A0A0A] text-[#F3F2EF] p-4 max-w-md mx-auto"><Capture /></div>} />
             </Route>
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/deals" replace />} />
+            {/* Default / Fallbacks */}
+            <Route path="/" element={<Navigate to="/today" replace />} />
+            <Route path="*" element={<Navigate to="/today" replace />} />
           </Routes>
         </BrowserRouter>
       </ToastProvider>

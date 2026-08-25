@@ -1,50 +1,42 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Phone, ArrowRight, ShieldCheck, CheckCircle2, Building, X, ChevronLeft } from 'lucide-react'
+import { Mail, ArrowRight, ShieldCheck, CheckCircle2, Building, ChevronLeft } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
-import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 
-type Step = 'phone' | 'otp' | 'business'
+type Step = 'email' | 'otp' | 'business'
 
 const Auth: React.FC = () => {
-  const [step, setStep] = useState<Step>('phone')
-  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState<Step>('email')
+  const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [resendTimer, setResendTimer] = useState(0)
-  const [isNewUser, setIsNewUser] = useState(false)
   
-  const { authenticateWithPhone } = useStore()
+  const { initialize, updateProfile } = useStore()
   const { toast } = useToast()
   const navigate = useNavigate()
 
-  const startResendTimer = () => {
-    setResendTimer(59)
-    const interval = setInterval(() => {
-      setResendTimer(t => {
-        if (t <= 1) { clearInterval(interval); return 0 }
-        return t - 1
-      })
-    }, 1000)
-  }
-
-  const handleSendOtp = async (e: React.FormEvent) => {
+  const handleSendMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!phone.trim()) return
+    if (!email.trim()) return
     setLoading(true)
     setError(null)
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const res = await axios.post(`${apiUrl}/api/auth/send-otp`, { phone })
-      setIsNewUser(res.data.isNewUser ?? false)
+      const { error: authError } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          shouldCreateUser: true,
+        }
+      })
+      if (authError) throw authError
       setStep('otp')
-      startResendTimer()
+      toast('Verification code sent to your email!', 'success')
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to send OTP. Check number and try again.')
+      setError(err.message || 'Failed to send verification code. Please check your email.')
     } finally {
       setLoading(false)
     }
@@ -55,21 +47,27 @@ const Auth: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const urlParams = new URLSearchParams(window.location.search);
-      const referredBy = urlParams.get('ref');
-      const res = await axios.post(`${apiUrl}/api/auth/verify-otp`, { phone, otp, referredBy })
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: otp.trim(),
+        type: 'email'
+      })
+      if (verifyError || !data.session) throw verifyError || new Error('Verification failed')
       
-      if (res.data.isNewUser) {
+      // Store session token and initialize
+      useStore.setState({ token: data.session.access_token })
+      await initialize()
+
+      // Check if business profile exists
+      const profile = useStore.getState().user
+      if (!profile?.business_name) {
         setStep('business')
       } else {
-        // Existing user — log them in directly
-        await authenticateWithPhone(phone, otp, res.data.token)
-        toast('Welcome back! 👋', 'success')
-        navigate('/deals')
+        toast('Welcome back to Sabi! 👋', 'success')
+        navigate('/today')
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Invalid or expired code.')
+      setError(err.message || 'Invalid or expired 6-digit code.')
     } finally {
       setLoading(false)
     }
@@ -81,76 +79,59 @@ const Auth: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const res = await axios.post(`${apiUrl}/api/auth/setup-profile`, { phone, businessName })
-      await authenticateWithPhone(phone, otp, res.data.token)
-      toast('Welcome to Sabi CRM! 🎉', 'success')
-      navigate('/deals')
+      await updateProfile({ business_name: businessName.trim() })
+      toast('Welcome to Sabi! 🚀', 'success')
+      navigate('/today')
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Setup failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleResend = async () => {
-    if (resendTimer > 0) return
-    setLoading(true)
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      await axios.post(`${apiUrl}/api/auth/send-otp`, { phone })
-      startResendTimer()
-      toast('New code sent!', 'success')
-    } catch {
-      toast('Failed to resend. Try again.', 'error')
+      setError(err.message || 'Profile setup failed. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col p-6 overflow-hidden relative">
+    <div className="min-h-screen bg-[#0A0A0A] text-[#F3F2EF] flex flex-col p-6 relative overflow-hidden">
       {/* Background glows */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#FFB020]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-[#10B981]/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Logo */}
-      <div className="mt-10 mb-12 relative">
-        <div className="flex items-center gap-3 mb-8 bg-surface-2 w-fit px-4 py-2.5 rounded-2xl border border-white/5">
-          <div className="w-7 h-7 bg-accent rounded-lg flex items-center justify-center">
-            <ShieldCheck size={16} className="text-primary" />
+      {/* Header / Brand */}
+      <div className="mt-10 mb-10 relative">
+        <div className="flex items-center gap-3 mb-6 bg-[#141414] w-fit px-4 py-2.5 rounded-2xl border border-[#262626]">
+          <div className="w-7 h-7 bg-[#FFB020] rounded-lg flex items-center justify-center font-black text-[#0A0A0A]">
+            S
           </div>
-          <span className="text-base font-extrabold uppercase tracking-tighter text-text-primary">Sabi CRM</span>
+          <span className="text-sm font-bold uppercase tracking-wider text-[#F3F2EF]">Sabi Memory</span>
         </div>
 
         <AnimatePresence mode="wait">
-          {step === 'phone' && (
-            <motion.div key="phone-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <h1 className="text-4xl font-extrabold text-text-primary leading-[1.1] mb-3">
-                Your business,<br />your CRM. 💚
+          {step === 'email' && (
+            <motion.div key="email-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+              <h1 className="text-3xl font-extrabold text-[#F3F2EF] leading-tight mb-2">
+                Never lose a sale<br />to a cold chat 💚
               </h1>
-              <p className="text-text-muted text-base leading-relaxed">
-                Enter your WhatsApp number to get started.
+              <p className="text-[#8E8E93] text-sm">
+                Enter your email to sign in or create an account.
               </p>
             </motion.div>
           )}
           {step === 'otp' && (
             <motion.div key="otp-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <h1 className="text-4xl font-extrabold text-text-primary leading-[1.1] mb-3">
-                Check your<br />WhatsApp 🔐
+              <h1 className="text-3xl font-extrabold text-[#F3F2EF] leading-tight mb-2">
+                Check your inbox 🔐
               </h1>
-              <p className="text-text-muted text-base leading-relaxed">
-                We sent a 6-digit code to <span className="text-text-primary font-bold">{phone}</span>
+              <p className="text-[#8E8E93] text-sm">
+                We sent a 6-digit code to <span className="text-[#F3F2EF] font-semibold">{email}</span>
               </p>
             </motion.div>
           )}
           {step === 'business' && (
             <motion.div key="biz-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <h1 className="text-4xl font-extrabold text-text-primary leading-[1.1] mb-3">
-                Name your<br />business 🏪
+              <h1 className="text-3xl font-extrabold text-[#F3F2EF] leading-tight mb-2">
+                Name your business 🏪
               </h1>
-              <p className="text-text-muted text-base leading-relaxed">
-                This appears on your Sabi dashboard.
+              <p className="text-[#8E8E93] text-sm">
+                What is your brand or store name?
               </p>
             </motion.div>
           )}
@@ -158,45 +139,45 @@ const Auth: React.FC = () => {
       </div>
 
       {/* Forms */}
-      <div className="flex-1">
+      <div className="flex-1 max-w-sm w-full mx-auto">
         <AnimatePresence mode="wait">
-          {step === 'phone' && (
+          {step === 'email' && (
             <motion.form
-              key="phone-form"
+              key="email-form"
               initial={{ x: -20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 20, opacity: 0 }}
-              onSubmit={handleSendOtp}
-              className="space-y-6"
+              onSubmit={handleSendMagicLink}
+              className="space-y-5"
             >
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em] ml-1">
-                  WhatsApp Number
+                <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider ml-1">
+                  Email Address
                 </label>
-                <div className="relative group">
-                  <Phone size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors" />
+                <div className="relative">
+                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8E8E93]" />
                   <input
                     required
-                    type="tel"
-                    placeholder="+234 800 000 0000"
-                    className="w-full bg-surface-2 rounded-2xl border border-white/5 py-5 pl-12 pr-4 text-text-primary outline-none focus:border-accent/40 transition-all font-body text-base"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    type="email"
+                    placeholder="vendor@sabi.app"
+                    className="w-full bg-[#141414] rounded-2xl border border-[#262626] py-4 pl-11 pr-4 text-[#F3F2EF] placeholder:text-[#8E8E93]/50 outline-none focus:border-[#FFB020]/50 transition-all text-base"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     autoFocus
                   />
                 </div>
               </div>
 
-              {error && <p className="text-hot text-xs font-bold text-center bg-hot/10 p-3 rounded-xl border border-hot/20">{error}</p>}
+              {error && <p className="text-[#EF4444] text-xs font-medium text-center bg-[#EF4444]/10 p-3 rounded-xl border border-[#EF4444]/20">{error}</p>}
 
               <button
                 type="submit"
-                disabled={loading || !phone.trim()}
-                className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg flex items-center justify-center gap-3 shadow-[0_15px_30px_rgba(37,211,102,0.3)] active:scale-[0.98] transition-all disabled:opacity-50"
+                disabled={loading || !email.trim()}
+                className="w-full bg-[#FFB020] text-[#0A0A0A] font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(255,176,32,0.2)]"
               >
                 {loading
-                  ? <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                  : <><span>Send Code</span><ArrowRight size={22} /></>
+                  ? <div className="w-6 h-6 border-3 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+                  : <><span>Send Login Code</span><ArrowRight size={20} /></>
                 }
               </button>
             </motion.form>
@@ -208,70 +189,43 @@ const Auth: React.FC = () => {
               initial={{ x: 20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -20, opacity: 0 }}
-              className="space-y-6"
+              className="space-y-5"
             >
               <div>
-                <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em] ml-1 mb-3 block">
+                <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider ml-1 mb-2 block">
                   6-digit code
                 </label>
-                <div className="flex justify-between gap-2">
-                  {[0,1,2,3,4,5].map((i) => (
-                    <input
-                      key={i}
-                      id={`otp-${i}`}
-                      type="tel"
-                      maxLength={1}
-                      inputMode="numeric"
-                      className="w-full aspect-square bg-surface-2 rounded-2xl border-2 border-white/5 text-center text-2xl font-mono font-extrabold text-accent outline-none focus:border-accent transition-all"
-                      value={otp[i] || ''}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/, '').substring(0, 1)
-                        const arr = otp.split('')
-                        arr[i] = val
-                        const next = arr.join('')
-                        setOtp(next)
-                        if (val) {
-                          const nextEl = document.getElementById(`otp-${i + 1}`)
-                          if (nextEl) (nextEl as HTMLInputElement).focus()
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Backspace' && !otp[i]) {
-                          const prev = document.getElementById(`otp-${i - 1}`)
-                          if (prev) (prev as HTMLInputElement).focus()
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
+                <input
+                  type="text"
+                  maxLength={6}
+                  inputMode="numeric"
+                  placeholder="123456"
+                  className="w-full bg-[#141414] rounded-2xl border border-[#262626] py-4 text-center text-2xl font-mono font-bold text-[#FFB020] outline-none focus:border-[#FFB020] transition-all letter-spacing-2"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  autoFocus
+                />
               </div>
 
-              {error && <p className="text-hot text-xs font-bold text-center bg-hot/10 p-3 rounded-xl border border-hot/20">{error}</p>}
+              {error && <p className="text-[#EF4444] text-xs font-medium text-center bg-[#EF4444]/10 p-3 rounded-xl border border-[#EF4444]/20">{error}</p>}
 
               <button
                 onClick={handleVerifyOtp}
                 disabled={otp.length < 6 || loading}
-                className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg flex items-center justify-center gap-3 shadow-[0_15px_30px_rgba(37,211,102,0.3)] active:scale-[0.98] transition-all disabled:opacity-50"
+                className="w-full bg-[#FFB020] text-[#0A0A0A] font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(255,176,32,0.2)]"
               >
                 {loading
-                  ? <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                  : <><span>Verify Code</span><CheckCircle2 size={22} /></>
+                  ? <div className="w-6 h-6 border-3 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+                  : <><span>Verify & Sign In</span><CheckCircle2 size={20} /></>
                 }
               </button>
 
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-col items-center gap-2 pt-2">
                 <button
-                  onClick={handleResend}
-                  disabled={resendTimer > 0 || loading}
-                  className="text-sm font-bold text-text-muted disabled:opacity-40 transition-colors hover:text-text-primary"
+                  onClick={() => { setStep('email'); setOtp(''); setError(null) }}
+                  className="text-xs font-medium text-[#8E8E93] hover:text-[#F3F2EF] flex items-center gap-1"
                 >
-                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Code'}
-                </button>
-                <button
-                  onClick={() => { setStep('phone'); setOtp(''); setError(null) }}
-                  className="text-xs font-bold text-hot/60 uppercase tracking-[0.2em] flex items-center gap-1.5"
-                >
-                  <ChevronLeft size={14} /> Change Number
+                  <ChevronLeft size={14} /> Back to Email
                 </button>
               </div>
             </motion.div>
@@ -284,19 +238,19 @@ const Auth: React.FC = () => {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -20, opacity: 0 }}
               onSubmit={handleSetBusiness}
-              className="space-y-6"
+              className="space-y-5"
             >
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em] ml-1">
+                <label className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wider ml-1">
                   Business Name
                 </label>
-                <div className="relative group">
-                  <Building size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors" />
+                <div className="relative">
+                  <Building size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8E8E93]" />
                   <input
                     required
                     type="text"
-                    placeholder="e.g. Chidinma Fashion House"
-                    className="w-full bg-surface-2 rounded-2xl border border-white/5 py-5 pl-12 pr-4 text-text-primary outline-none focus:border-accent/40 transition-all font-body text-base"
+                    placeholder="e.g. Chidinma Couture"
+                    className="w-full bg-[#141414] rounded-2xl border border-[#262626] py-4 pl-11 pr-4 text-[#F3F2EF] placeholder:text-[#8E8E93]/50 outline-none focus:border-[#FFB020]/50 transition-all text-base"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
                     autoFocus
@@ -304,16 +258,16 @@ const Auth: React.FC = () => {
                 </div>
               </div>
 
-              {error && <p className="text-hot text-xs font-bold text-center bg-hot/10 p-3 rounded-xl border border-hot/20">{error}</p>}
+              {error && <p className="text-[#EF4444] text-xs font-medium text-center bg-[#EF4444]/10 p-3 rounded-xl border border-[#EF4444]/20">{error}</p>}
 
               <button
                 type="submit"
                 disabled={loading || !businessName.trim()}
-                className="w-full bg-accent text-primary font-extrabold py-5 rounded-2xl text-lg flex items-center justify-center gap-3 shadow-[0_15px_30px_rgba(37,211,102,0.3)] active:scale-[0.98] transition-all disabled:opacity-50"
+                className="w-full bg-[#10B981] text-[#0A0A0A] font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
               >
                 {loading
-                  ? <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                  : <><span>Let's Go 🚀</span><ArrowRight size={22} /></>
+                  ? <div className="w-6 h-6 border-3 border-[#0A0A0A] border-t-transparent rounded-full animate-spin" />
+                  : <><span>Complete Setup</span><ArrowRight size={20} /></>
                 }
               </button>
             </motion.form>
@@ -321,8 +275,8 @@ const Auth: React.FC = () => {
         </AnimatePresence>
       </div>
 
-      <div className="pb-6 text-center">
-        <p className="text-[10px] text-text-muted/40 uppercase tracking-[0.3em] font-bold">Built for Naija vendors 🇳🇬</p>
+      <div className="pb-4 text-center">
+        <p className="text-[10px] text-[#8E8E93]/60 uppercase tracking-widest font-medium">Sabi Revenue Memory • v1.0</p>
       </div>
     </div>
   )
