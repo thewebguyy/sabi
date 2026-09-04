@@ -5,6 +5,7 @@ import { Deal } from '../store/useStore'
 import axios from 'axios'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
+import { trackMilestone, trackEvent } from '../lib/analytics'
 
 interface FollowUpSheetProps {
   deal: Deal
@@ -61,6 +62,7 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
       })
       await updateDeal(deal.id, { last_vendor_contact_at: new Date().toISOString() })
+      trackMilestone('first_followup', { deal_id: deal.id, method: 'direct_send' })
       setSent(true)
       setTimeout(onClose, 1200)
     } catch (err: any) {
@@ -88,6 +90,8 @@ const FollowUpSheet: React.FC<FollowUpSheetProps> = ({ deal, onClose }) => {
       const text = `Hi ${name}! Here's your payment link for ${deal.product_name}:\n${paymentUrl} — ₦${deal.amount}`;
       const encoded = encodeURIComponent(text);
       const phone = deal.customer_phone ? deal.customer_phone.replace(/\D/g, '') : '';
+      trackMilestone('first_followup', { deal_id: deal.id, method: 'payment_link' });
+      trackEvent('whatsapp_opened', { deal_id: deal.id, action: 'payment_link' });
       window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
       onClose();
     } catch (err: any) {

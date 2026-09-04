@@ -62,6 +62,7 @@ const Auth: React.FC = () => {
       if (!profile?.business_name) {
         setStep('business')
       } else {
+        trackEvent('auth_completed', { is_returning: true })
         toast('Welcome back to Sabi! 👋', 'success')
         navigate('/today')
       }
@@ -79,6 +80,7 @@ const Auth: React.FC = () => {
     setError(null)
     try {
       await updateProfile({ business_name: businessName.trim() })
+      trackEvent('auth_completed', { is_returning: false, business_name: businessName.trim() })
       toast('Welcome to Sabi! 🚀', 'success')
       navigate('/today')
     } catch (err: any) {

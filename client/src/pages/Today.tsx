@@ -4,6 +4,7 @@ import { Clock, CheckCircle2, XCircle, Sparkles, MessageCircle, AlertCircle, Cop
 import { useStore, DEFAULT_FOLLOW_UP_DELAY_HOURS } from '../store/useStore'
 import { Deal } from '../types'
 import { useNavigate } from 'react-router-dom'
+import { trackEvent, trackMilestone } from '../lib/analytics'
 
 export const Today: React.FC = () => {
   const { deals, markWon, markLost, recordVendorContact } = useStore()
@@ -56,9 +57,21 @@ export const Today: React.FC = () => {
 
   const handleOpenWhatsApp = (deal: Deal, message: string) => {
     recordVendorContact(deal.id)
+    trackMilestone('first_followup', { deal_id: deal.id, amount: deal.amount })
+    trackEvent('whatsapp_opened', { deal_id: deal.id, customer_phone: deal.customer_phone ? 'present' : 'none' })
     const encoded = encodeURIComponent(message)
     const cleanPhone = deal.customer_phone ? deal.customer_phone.replace(/\D/g, '') : ''
     window.open(cleanPhone ? `https://wa.me/${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`, '_blank')
+  }
+
+  const handleMarkWon = (deal: Deal) => {
+    trackEvent('deal_won', { deal_id: deal.id, amount: deal.amount })
+    markWon(deal.id)
+  }
+
+  const handleMarkLost = (deal: Deal) => {
+    trackEvent('deal_lost', { deal_id: deal.id, amount: deal.amount })
+    markLost(deal.id)
   }
 
   return (
@@ -137,10 +150,10 @@ export const Today: React.FC = () => {
                 >
                   <MessageCircle size={16} /><span>Follow Up</span>
                 </button>
-                <button onClick={() => markWon(deal.id)} title="Mark Won"
+                <button onClick={() => handleMarkWon(deal)} title="Mark Won"
                   className="bg-success/15 text-success border border-success/30 p-2.5 rounded-xl hover:bg-success/25 active:scale-95 transition-all"
                 ><CheckCircle2 size={16} /></button>
-                <button onClick={() => markLost(deal.id)} title="Mark Lost"
+                <button onClick={() => handleMarkLost(deal)} title="Mark Lost"
                   className="bg-danger/15 text-danger border border-danger/30 p-2.5 rounded-xl hover:bg-danger/25 active:scale-95 transition-all"
                 ><XCircle size={16} /></button>
               </div>

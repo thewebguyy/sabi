@@ -4,6 +4,7 @@ import { Clipboard, Sparkles, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore, DEFAULT_FOLLOW_UP_DELAY_HOURS } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
+import { trackMilestone } from '../lib/analytics'
 
 export const Capture: React.FC = () => {
   const [searchParams] = useSearchParams()
@@ -73,6 +74,7 @@ export const Capture: React.FC = () => {
       setAmount(parsedAmount ? parsedAmount.toString() : '0')
       setConstraint('')
 
+      trackMilestone('first_capture', { text_length: rawText.length, has_amount: parsedAmount > 0 })
       setExtracting(false)
       setShowConfirm(true)
     }, 600)
@@ -102,6 +104,11 @@ export const Capture: React.FC = () => {
         follow_up_due_at: dueTime,
         won_at: null,
         lost_at: null
+      })
+
+      trackMilestone('first_deal_created', {
+        amount: parseFloat(amount) || 0,
+        customer_name: customerName.trim()
       })
 
       toast('Opportunity saved!', 'success')

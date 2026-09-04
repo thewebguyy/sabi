@@ -6,7 +6,7 @@ const OpportunityCalculator: React.FC = () => {
   const [avgOrderValue, setAvgOrderValue] = useState(15000)
   const [coldPercent, setColdPercent] = useState(20)
 
-  // 26 commercial selling days per month (standard Monday-Saturday retail cycle)
+  // Assumed 26 selling days per month (typical 6-day trade week assumption)
   const SELLING_DAYS = 26
 
   const monthlyOpportunity = useCallback(() => {
@@ -44,10 +44,10 @@ const OpportunityCalculator: React.FC = () => {
             </p>
             <div className="p-4 rounded-xl bg-[#121513] border border-[#232B25] space-y-2">
               <p className="font-mono text-xs font-bold text-accent uppercase tracking-wider">
-                Transparent math · You control assumptions
+                Transparent calculation · You control assumptions
               </p>
               <p className="text-xs text-text-muted leading-relaxed">
-                We calculate: <span className="font-mono text-text-primary">Inquiries/day × Avg Order × Quiet % × 26 selling days</span>. No hidden multipliers or inflated claims.
+                Formula: <span className="font-mono text-text-primary">Inquiries/day × Avg Order × Quiet % × Assumed 26 trade days</span>. You set the figures that match your business.
               </p>
             </div>
           </div>
