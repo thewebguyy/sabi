@@ -10,10 +10,14 @@ import OpportunityCalculator from '../components/landing/OpportunityCalculator'
 import TrustSection from '../components/landing/TrustSection'
 import FAQSection from '../components/landing/FAQSection'
 
+import { trackEvent } from '../lib/analytics'
+
 const Landing: React.FC = () => {
   const [showStickyBar, setShowStickyBar] = useState(false)
 
   useEffect(() => {
+    trackEvent('landing_view')
+
     const handleScroll = () => {
       setShowStickyBar(window.scrollY > 600)
     }
@@ -56,6 +60,7 @@ const Landing: React.FC = () => {
 
             <Link
               to="/auth"
+              onClick={() => trackEvent('start_free_click', { source: 'nav' })}
               className="px-4 sm:px-5 py-2 rounded-lg bg-accent text-background text-xs sm:text-sm font-extrabold hover:bg-accent/90 active:scale-[0.98] transition-all shadow-sm"
             >
               Start Free
@@ -109,6 +114,7 @@ const Landing: React.FC = () => {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 max-w-md">
                     <Link
                       to="/auth"
+                      onClick={() => trackEvent('start_free_click', { source: 'hero' })}
                       className="group flex-1 bg-accent text-background font-extrabold py-4 px-6 rounded-xl text-base flex items-center justify-center gap-2 hover:bg-[#ffba33] active:scale-[0.98] transition-all shadow-[0_4px_25px_rgba(255,176,32,0.25)]"
                     >
                       <span>Start Free — No Download Needed</span>
@@ -132,7 +138,7 @@ const Landing: React.FC = () => {
                   {/* Top instrumentation */}
                   <div className="flex justify-between items-start pb-3 border-b border-[#1F2521]">
                     <div>
-                      <span className="editorial-kicker text-text-muted">TODAY'S AT-RISK MONEY</span>
+                      <span className="editorial-kicker text-text-muted">TOTAL OPEN OPPORTUNITY</span>
                       <p className="font-mono text-3xl font-extrabold text-accent">₦385,000</p>
                     </div>
                     <span className="font-mono text-[10px] text-accent bg-[#1E1B0F] border border-accent/30 px-2.5 py-1 rounded">
@@ -166,6 +172,7 @@ const Landing: React.FC = () => {
 
                     <Link
                       to="/auth"
+                      onClick={() => trackEvent('start_free_click', { source: 'hero_today_preview' })}
                       className="w-full bg-[#25D366] text-[#0A0D0B] font-extrabold py-2.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 hover:bg-[#22c35e] transition-all"
                     >
                       <MessageCircle size={14} />
@@ -320,6 +327,7 @@ const Landing: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
               <Link
                 to="/auth"
+                onClick={() => trackEvent('start_free_click', { source: 'final_cta' })}
                 className="w-full sm:w-auto bg-accent text-background font-extrabold py-4 px-8 rounded-xl text-base flex items-center justify-center gap-2 hover:bg-[#ffba33] active:scale-[0.98] transition-all shadow-[0_4px_30px_rgba(255,176,32,0.25)]"
               >
                 <span>Start Free</span>
@@ -370,6 +378,7 @@ const Landing: React.FC = () => {
         >
           <Link
             to="/auth"
+            onClick={() => trackEvent('start_free_click', { source: 'sticky_bar' })}
             className="flex items-center justify-center gap-2 w-full bg-accent text-background font-extrabold py-3.5 px-4 rounded-xl text-sm active:scale-[0.98] transition-all shadow-lg"
           >
             <span>Start Free — No Download Needed</span>

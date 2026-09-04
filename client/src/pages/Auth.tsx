@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
+import { trackEvent } from '../lib/analytics'
 
 type Step = 'email' | 'otp' | 'business'
 
@@ -19,6 +20,10 @@ const Auth: React.FC = () => {
   const { initialize, updateProfile } = useStore()
   const { toast } = useToast()
   const navigate = useNavigate()
+
+  React.useEffect(() => {
+    trackEvent('auth_started')
+  }, [])
 
   const handleSendMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -1,11 +1,22 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Clock, ExternalLink, RotateCcw, MessageSquare } from 'lucide-react'
+import { trackEvent } from '../../lib/analytics'
 
 type SimState = 'idle' | 'sent'
 
 const ChatSimulator: React.FC = () => {
   const [state, setState] = useState<SimState>('idle')
+
+  const handleSend = () => {
+    trackEvent('simulator_followup_click', { deal_value: 60000 })
+    setState('sent')
+  }
+
+  const handleReplay = () => {
+    trackEvent('simulator_interaction', { action: 'replay' })
+    setState('idle')
+  }
 
   return (
     <section className="py-20 px-6 border-t border-[#1C221E]" id="simulator">
@@ -77,7 +88,7 @@ const ChatSimulator: React.FC = () => {
                     <Clock size={12} className="shrink-0 animate-pulse" />
                     <span className="font-mono text-[11px] font-bold">2 DAYS QUIET · NO REPLY</span>
                     <span className="text-text-muted">·</span>
-                    <span className="font-mono text-[11px] font-bold">₦60,000 AT RISK</span>
+                    <span className="font-mono text-[11px] font-bold">₦60,000 OPPORTUNITY</span>
                   </div>
                 </div>
               </div>
@@ -110,12 +121,12 @@ const ChatSimulator: React.FC = () => {
 
                     <div className="bg-[#141815] border border-white/5 rounded-lg p-3">
                       <p className="text-xs sm:text-[13px] text-text-primary italic leading-relaxed">
-                        "Good afternoon Amaka! Just checking in on the burgundy Swiss lace (5 yards) for your sister's wedding. I have another buyer asking for the same piece, but wanted to check with you first. Still want it dispatched today? 😊"
+                        "Good afternoon Amaka! Just checking in on the burgundy Swiss lace (5 yards) at ₦60,000. Another buyer is asking for the same piece, but wanted to check with you first. Still want it dispatched today? 😊"
                       </p>
                     </div>
 
                     <button
-                      onClick={() => setState('sent')}
+                      onClick={handleSend}
                       className="w-full bg-[#25D366] text-[#0A0D0B] font-bold py-3 px-4 rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-[#22c35e] active:scale-[0.98] transition-all shadow-lg"
                     >
                       <ExternalLink size={16} />
@@ -139,17 +150,20 @@ const ChatSimulator: React.FC = () => {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-text-primary">Follow-up sent via WhatsApp ✓</h4>
-                        <p className="text-xs text-text-muted">
-                          Customer reminded before looking elsewhere. Sabi moves Amaka to 'Followed Up'.
+                        <p className="text-xs text-text-muted mt-0.5">
+                          Message opened in WhatsApp. Customer has been reminded.
                         </p>
                       </div>
                     </div>
 
-                    <div className="pt-2 flex justify-between items-center border-t border-white/10">
-                      <span className="font-mono text-[11px] text-accent">₦60,000 deal kept alive</span>
+                    <div className="pt-3 flex justify-between items-center border-t border-white/10">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                        <span className="font-mono text-[11px] text-text-muted">Status: Waiting for customer</span>
+                      </div>
                       <button
-                        onClick={() => setState('idle')}
-                        className="inline-flex items-center gap-1.5 font-mono text-xs text-text-muted hover:text-text-primary transition-colors py-1 px-2 rounded hover:bg-white/5"
+                        onClick={handleReplay}
+                        className="inline-flex items-center gap-1.5 font-mono text-xs text-text-muted hover:text-text-primary transition-colors py-1 px-2.5 rounded hover:bg-white/5"
                       >
                         <RotateCcw size={13} />
                         <span>Replay Simulator</span>

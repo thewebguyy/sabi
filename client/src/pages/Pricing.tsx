@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Check, ArrowLeft, Briefcase, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { trackEvent } from '../lib/analytics'
 
 interface PricingFeature {
   text: string
@@ -11,6 +12,7 @@ interface PlanConfig {
   title: string
   price: string
   priceSuffix?: string
+  badge?: string
   subtitle: string
   icon: React.ReactNode
   isPrimary: boolean
@@ -35,24 +37,29 @@ const plans: PlanConfig[] = [
     ctaText: 'Start Free',
   },
   {
-    title: 'Paid',
+    title: 'Pilot Pro',
     price: '₦4,900',
     priceSuffix: '/month',
-    subtitle: 'Unlimited memory for high-volume social commerce vendors.',
+    badge: 'Early Access Pilot',
+    subtitle: 'Unlimited capacity for high-volume social commerce vendors.',
     icon: <Zap size={22} className="text-accent" />,
     isPrimary: true,
     features: [
       { text: 'Unlimited active conversations' },
       { text: 'Context-rich follow-up draft generation' },
       { text: 'Custom quiet-time alert thresholds' },
-      { text: 'Recovered revenue & won deal tracking' },
+      { text: 'Won deals & recovered revenue tracking' },
       { text: 'Direct WhatsApp support' },
     ],
-    ctaText: 'Start Free — Upgrade Anytime',
+    ctaText: 'Start Free — Upgrade Later',
   },
 ]
 
 const Pricing: React.FC = () => {
+  useEffect(() => {
+    trackEvent('pricing_view')
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#0A0D0B] text-text-primary font-sans">
       {/* Navigation */}
@@ -75,10 +82,10 @@ const Pricing: React.FC = () => {
       <main className="pt-32 pb-24 px-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center space-y-4 mb-16">
-          <p className="editorial-kicker text-accent">Transparent Pricing</p>
+          <p className="editorial-kicker text-accent">Simple, Transparent Plans</p>
           <h1 className="text-4xl sm:text-5xl font-display font-extrabold text-text-primary leading-[1.08]">
-            Simple, honest pricing. <br />
-            <span className="text-accent">Zero hidden fees.</span>
+            Start free. <br />
+            <span className="text-accent">Upgrade only when it pays for itself.</span>
           </h1>
           <p className="text-base sm:text-lg text-text-muted leading-relaxed">
             Recovering just one forgotten ₦20,000 order pays for 4 months of Sabi.
@@ -97,9 +104,9 @@ const Pricing: React.FC = () => {
                   : 'bg-[#121513] border border-[#232B25]'
               }`}
             >
-              {plan.isPrimary && (
+              {plan.badge && (
                 <span className="absolute -top-3 right-6 font-mono text-[10px] font-bold text-background bg-accent px-3 py-1 rounded-full uppercase tracking-wider">
-                  Recommended for busy vendors
+                  {plan.badge}
                 </span>
               )}
 
@@ -151,6 +158,7 @@ const Pricing: React.FC = () => {
 
               <Link
                 to="/auth"
+                onClick={() => trackEvent('start_free_click', { source: 'pricing_card', plan: plan.title })}
                 className={`w-full py-4 rounded-xl font-bold text-sm text-center transition-all active:scale-[0.98] ${
                   plan.isPrimary
                     ? 'bg-accent text-background hover:bg-[#ffba33] shadow-[0_4px_20px_rgba(255,176,32,0.2)]'
@@ -163,13 +171,13 @@ const Pricing: React.FC = () => {
           ))}
         </div>
 
-        {/* Guarantee Banner */}
+        {/* Pricing Validation Disclaimer */}
         <div className="mt-14 max-w-2xl mx-auto p-5 rounded-xl bg-[#121513] border border-[#232B25] text-center space-y-2">
           <p className="font-mono text-xs font-bold text-accent uppercase tracking-wider">
-            Try Free with No Risk
+            Pilot Validation Period
           </p>
           <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
-            No debit card required to sign up. Every account starts on the free tier with 15 conversation slots.
+            All early accounts start on the free tier with 15 conversation slots. Paid pricing is currently in pilot testing and subject to merchant feedback.
           </p>
         </div>
       </main>

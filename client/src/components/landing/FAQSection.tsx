@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
+import { trackEvent } from '../../lib/analytics'
 
 interface FAQItemProps {
   question: string
@@ -76,6 +77,14 @@ const faqs: Array<{ question: string; answer: string }> = [
 const FAQSection: React.FC = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
 
+  const handleToggle = (i: number) => {
+    const next = openIndex === i ? null : i
+    if (next !== null) {
+      trackEvent('faq_open', { question: faqs[i].question })
+    }
+    setOpenIndex(next)
+  }
+
   return (
     <section className="py-20 px-6 border-t border-[#1C221E]" id="faq">
       <div className="max-w-4xl mx-auto">
@@ -96,7 +105,7 @@ const FAQSection: React.FC = () => {
               question={faq.question}
               answer={faq.answer}
               isOpen={openIndex === i}
-              onToggle={() => setOpenIndex(openIndex === i ? null : i)}
+              onToggle={() => handleToggle(i)}
             />
           ))}
         </div>
