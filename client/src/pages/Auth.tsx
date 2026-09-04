@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, ArrowRight, ShieldCheck, CheckCircle2, Building, ChevronLeft } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
 import { useNavigate } from 'react-router-dom'
@@ -28,6 +28,12 @@ const Auth: React.FC = () => {
   const handleSendMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim()) return
+
+    if (!isSupabaseConfigured) {
+      setError('Supabase credentials are not configured in Vercel. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel Project Settings > Environment Variables, then redeploy.')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {

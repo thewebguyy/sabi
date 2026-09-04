@@ -1,6 +1,17 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Provide a valid URL fallback so missing build-time env vars do NOT crash the bundle
+// during public landing page rendering.
+const rawUrl = import.meta.env.VITE_SUPABASE_URL
+const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const isSupabaseConfigured = Boolean(
+  rawUrl &&
+  rawKey &&
+  rawUrl !== 'https://placeholder.supabase.co'
+)
+
+const supabaseUrl = isSupabaseConfigured ? rawUrl : 'https://placeholder.supabase.co'
+const supabaseAnonKey = isSupabaseConfigured ? rawKey : 'placeholder-anon-key'
+
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey)
