@@ -15,6 +15,7 @@ export default {
         "text-muted": "#8E8E93",
         accent: "#FFB020",        // attention / money / amber
         "accent-whatsapp": "#25D366",
+        gold: "#F59E0B",          // premium tier highlights
         success: "#10B981",       // emerald — won deals
         danger: "#EF4444",        // lost / cancel
         primary: "#0A3828",       // legacy deep green (kept for gradients)

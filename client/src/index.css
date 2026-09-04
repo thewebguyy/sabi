@@ -57,3 +57,43 @@ h1, h2, h3, h4, .font-syne {
     scrollbar-width: none;
   }
 }
+
+/* Landing page — Chat simulator bubbles */
+.chat-bubble-incoming {
+  @apply bg-surface-2 text-text-primary rounded-2xl rounded-tl-md px-4 py-2.5 text-sm leading-relaxed;
+  max-width: 85%;
+}
+
+.chat-bubble-outgoing {
+  @apply bg-primary text-text-primary rounded-2xl rounded-tr-md px-4 py-2.5 text-sm leading-relaxed;
+  max-width: 85%;
+}
+
+/* Landing page — Phone frame for product screenshots */
+.phone-frame {
+  @apply rounded-[2rem] border-[3px] border-surface-2 bg-background overflow-hidden shadow-2xl;
+  aspect-ratio: 9 / 19.5;
+  max-width: 320px;
+}
+
+/* Landing page — Slider thumb styling */
+input[type="range"].sabi-slider {
+  @apply appearance-none w-full h-1.5 rounded-full bg-surface-2 outline-none;
+}
+input[type="range"].sabi-slider::-webkit-slider-thumb {
+  @apply appearance-none w-5 h-5 rounded-full bg-accent cursor-pointer;
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.4);
+}
+input[type="range"].sabi-slider::-moz-range-thumb {
+  @apply w-5 h-5 rounded-full bg-accent cursor-pointer border-0;
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.4);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
