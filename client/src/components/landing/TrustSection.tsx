@@ -1,51 +1,67 @@
 import React from 'react'
-import { Lock, Smartphone, MessageCircle } from 'lucide-react'
+import { ShieldCheck, UserCheck, Smartphone, Database } from 'lucide-react'
 
-interface TrustItemProps {
-  icon: React.ReactNode
-  title: string
-  description: string
-}
-
-const TrustItem: React.FC<TrustItemProps> = ({ icon, title, description }) => (
-  <div className="bg-surface rounded-2xl border border-surface-border p-5 space-y-3">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 rounded-2xl bg-success/10 border border-success/20 flex items-center justify-center text-success shrink-0">
-        {icon}
-      </div>
-      <h3 className="text-sm font-bold text-text-primary">{title}</h3>
-    </div>
-    <p className="text-xs text-text-muted leading-relaxed">{description}</p>
-  </div>
-)
+const principles = [
+  {
+    icon: <Database size={20} className="text-accent" />,
+    title: 'No raw chat storage',
+    description:
+      'Sabi does not keep logs of your private customer chats. Once the deal details (name, item, amount) are captured, raw text is discarded.',
+  },
+  {
+    icon: <UserCheck size={20} className="text-[#25D366]" />,
+    title: 'You control every message sent',
+    description:
+      'Sabi never messages your customers behind your back. It prepares the text and opens your real WhatsApp. You review and tap Send yourself.',
+  },
+  {
+    icon: <Smartphone size={20} className="text-accent" />,
+    title: 'Zero app store download needed',
+    description:
+      'Runs instantly in your phone browser (Chrome, Safari). No 200MB app taking up phone space. Add to your home screen in 3 taps.',
+  },
+  {
+    icon: <ShieldCheck size={20} className="text-[#25D366]" />,
+    title: 'Your customer list is yours alone',
+    description:
+      'We do not sell, rent, or share customer contact numbers with any third parties or advertisers. Your business data remains strictly confidential.',
+  },
+]
 
 const TrustSection: React.FC = () => {
   return (
-    <section className="py-16 px-6" id="trust">
-      <div className="max-w-md mx-auto">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-text-muted mb-3">
-          Trust & Privacy
-        </p>
-        <h2 className="text-2xl font-display font-extrabold mb-8 leading-tight">
-          Your customers are <span className="text-accent">your business.</span>
-        </h2>
+    <section className="py-20 px-6 border-t border-[#1C221E]" id="trust">
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-12 space-y-3">
+          <p className="editorial-kicker text-accent">Trust & Privacy Architecture</p>
+          <h2 className="text-3xl sm:text-4xl lg:text-[44px] font-display font-extrabold leading-[1.08] text-text-primary max-w-2xl">
+            Your customers are <br />
+            <span className="text-accent">your livelihood.</span>
+          </h2>
+          <p className="text-base sm:text-lg text-text-muted max-w-xl">
+            We built Sabi respecting how African vendors actually run their businesses on WhatsApp.
+          </p>
+        </div>
 
-        <div className="space-y-3">
-          <TrustItem
-            icon={<Lock size={20} />}
-            title="Your data stays yours"
-            description="Sabi does not store raw WhatsApp chat logs. Conversations are processed to extract deal details, then discarded. We never sell or share your customer information."
-          />
-          <TrustItem
-            icon={<MessageCircle size={20} />}
-            title="Sabi doesn't send messages on your behalf"
-            description="It helps you remember who to follow up with and prepares the message. You decide when to send it. You stay in full control of every customer interaction."
-          />
-          <TrustItem
-            icon={<Smartphone size={20} />}
-            title="No app download required"
-            description="Sabi runs in your phone's browser. Works on any Android or iPhone. No storage space needed, no app store required."
-          />
+        <div className="grid sm:grid-cols-2 gap-6">
+          {principles.map((p, idx) => (
+            <div
+              key={idx}
+              className="bg-[#121513] rounded-xl border border-[#232B25] p-6 space-y-3 hover:border-[#2D3830] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#181D1A] border border-[#242C26] flex items-center justify-center shrink-0">
+                  {p.icon}
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-text-primary">
+                  {p.title}
+                </h3>
+              </div>
+              <p className="text-sm text-text-muted leading-relaxed">
+                {p.description}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

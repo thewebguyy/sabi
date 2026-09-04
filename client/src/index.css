@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,37 +10,47 @@
 }
 
 body {
-  @apply bg-background text-text-primary font-body antialiased;
+  @apply bg-[#0A0D0B] text-text-primary antialiased;
+  font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   background-attachment: fixed;
 }
 
-h1, h2, h3, h4, .font-syne {
-  @apply font-display;
+/* Display headings — Bricolage Grotesque for human editorial character */
+h1, h2, h3, .font-display {
+  font-family: 'Bricolage Grotesque', Georgia, serif;
+}
+
+/* Mono — IBM Plex Mono for commerce instrumentation & financial figures */
+.font-mono {
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  letter-spacing: -0.02em;
 }
 
 /* Custom Scrollbar for Dark Theme */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-background;
+  background: #0A0D0B;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-surface-2 rounded-full;
+  background: #1F2521;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-text-muted;
+  background: #2E3832;
 }
 
-/* Glassmorphism utility */
+/* Subtle glassmorphism — used sparingly on fixed nav only */
 .glass {
-  @apply bg-surface bg-opacity-70 border border-white border-opacity-10;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(10, 13, 11, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Mobile Nav fix */
@@ -58,40 +69,52 @@ h1, h2, h3, h4, .font-syne {
   }
 }
 
-/* Landing page — Chat simulator bubbles */
+/* ─── Editorial Brand Components ─── */
+
+/* Chat simulator bubbles with intentional asymmetry */
 .chat-bubble-incoming {
-  @apply bg-surface-2 text-text-primary rounded-2xl rounded-tl-md px-4 py-2.5 text-sm leading-relaxed;
-  max-width: 85%;
+  @apply bg-[#171B18] text-[#F3F2EF] px-4 py-3 text-[14px] sm:text-[15px] leading-relaxed border border-white/5;
+  border-radius: 2px 14px 14px 14px;
+  max-width: 90%;
 }
 
 .chat-bubble-outgoing {
-  @apply bg-primary text-text-primary rounded-2xl rounded-tr-md px-4 py-2.5 text-sm leading-relaxed;
-  max-width: 85%;
+  background: #0D2C20;
+  @apply text-[#F3F2EF] px-4 py-3 text-[14px] sm:text-[15px] leading-relaxed border border-[#1A4B37];
+  border-radius: 14px 2px 14px 14px;
+  max-width: 90%;
 }
 
-/* Landing page — Phone frame for product screenshots */
+/* Phone frame for live UI representations */
 .phone-frame {
-  @apply rounded-[2rem] border-[3px] border-surface-2 bg-background overflow-hidden shadow-2xl;
-  aspect-ratio: 9 / 19.5;
-  max-width: 320px;
+  @apply border border-[#232B25] bg-[#0A0D0B] overflow-hidden;
+  border-radius: 1.25rem;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-/* Landing page — Slider thumb styling */
+/* Editorial badge */
+.editorial-kicker {
+  @apply text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-[#A3A8A4];
+}
+
+/* Sabi slider */
 input[type="range"].sabi-slider {
-  @apply appearance-none w-full h-1.5 rounded-full bg-surface-2 outline-none;
+  @apply appearance-none w-full h-1.5 rounded-full bg-[#1F2521] outline-none cursor-pointer;
 }
 input[type="range"].sabi-slider::-webkit-slider-thumb {
-  @apply appearance-none w-5 h-5 rounded-full bg-accent cursor-pointer;
-  box-shadow: 0 0 10px rgba(255, 176, 32, 0.4);
+  @apply appearance-none w-5 h-5 rounded-full bg-[#FFB020] cursor-pointer shadow-md;
+  transition: transform 0.15s ease;
+}
+input[type="range"].sabi-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
 }
 input[type="range"].sabi-slider::-moz-range-thumb {
-  @apply w-5 h-5 rounded-full bg-accent cursor-pointer border-0;
-  box-shadow: 0 0 10px rgba(255, 176, 32, 0.4);
+  @apply w-5 h-5 rounded-full bg-[#FFB020] cursor-pointer border-none shadow-md;
 }
 
-/* Reduced motion */
+/* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

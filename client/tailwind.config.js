@@ -21,9 +21,10 @@ export default {
         primary: "#0A3828",       // legacy deep green (kept for gradients)
       },
       fontFamily: {
-        display: ["Syne", "sans-serif"],
-        body: ["DM Sans", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        display: ['"Bricolage Grotesque"', 'Georgia', 'serif'],
+        sans: ['"General Sans"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        body: ['"General Sans"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', '"Courier New"', 'monospace'],
       },
     },
   },
