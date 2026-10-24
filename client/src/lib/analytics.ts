@@ -10,6 +10,7 @@ export type AnalyticsEvent =
   | 'start_free_click'
   | 'pricing_view'
   | 'simulator_interaction'
+  | 'simulator_vertical_change'
   | 'simulator_followup_click'
   | 'calculator_interaction'
   | 'faq_open'
