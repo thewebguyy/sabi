@@ -56,7 +56,11 @@ export function parseNigerianChat(rawText: string): ParsedDealResult {
   // 3. Customer name extraction
   let detectedName = '';
   for (const line of lines) {
-    const chatMatch = line.match(/(?:\[?\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\]?|\d{1,2}\/\d{1,2}\/\d{2,4}.*?[-:]\s*)([^:]{2,25}):/i);
+    // WhatsApp format A: [10:24 AM, 12/04/2026] Adaeze Fashion: Hi
+    // WhatsApp format B: 12/04/2026, 10:24 AM - Adaeze Fashion: Hi
+    // WhatsApp format C: Adaeze Fashion: Hi
+    const lineWithoutBracketTimestamp = line.replace(/^\[[^\]]+\]\s*/, '').replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}[^:-]*[-:]\s*/, '');
+    const chatMatch = lineWithoutBracketTimestamp.match(/^([^:]{2,30}):/);
     if (chatMatch) {
       const candidate = chatMatch[1].trim();
       if (!/^(you|me|vendor|admin|seller|sabi|owner)$/i.test(candidate)) {
