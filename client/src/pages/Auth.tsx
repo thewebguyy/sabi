@@ -1,51 +1,90 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, ArrowRight, ShieldCheck, CheckCircle2, Building, ChevronLeft } from 'lucide-react'
+import { Phone, Mail, ArrowRight, ShieldCheck, CheckCircle2, Building, ChevronLeft, Lock, MessageCircle, Sun, Moon } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
-import { useNavigate } from 'react-router-dom'
+import { useTheme } from '../context/ThemeContext'
+import { useNavigate, Link } from 'react-router-dom'
 import { trackEvent } from '../lib/analytics'
 
-type Step = 'email' | 'otp' | 'business'
+type AuthMethod = 'phone' | 'email'
+type Step = 'input' | 'otp' | 'business'
 
 const Auth: React.FC = () => {
-  const [step, setStep] = useState<Step>('email')
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('phone')
+  const [step, setStep] = useState<Step>('input')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
+  const { theme, toggleTheme } = useTheme()
   const { initialize, updateProfile } = useStore()
   const { toast } = useToast()
   const navigate = useNavigate()
 
   React.useEffect(() => {
-    trackEvent('auth_started')
+    trackEvent('auth_started', { default_method: 'phone' })
   }, [])
 
-  const handleSendMagicLink = async (e: React.FormEvent) => {
+  // Standardize Nigerian phone format: converts 080... or 80... to +23480...
+  const formatNigerianPhone = (raw: string): string => {
+    const cleaned = raw.replace(/\D/g, '')
+    if (cleaned.startsWith('234')) {
+      return `+${cleaned}`
+    }
+    if (cleaned.startsWith('0')) {
+      return `+234${cleaned.slice(1)}`
+    }
+    if (cleaned.length === 10) {
+      return `+234${cleaned}`
+    }
+    return `+${cleaned}`
+  }
+
+  const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim()) return
 
     if (!isSupabaseConfigured) {
-      setError('Supabase credentials are not configured in Vercel. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel Project Settings > Environment Variables, then redeploy.')
+      setError('Database connection is not configured in environment variables. Please check Vercel settings.')
       return
     }
 
     setLoading(true)
     setError(null)
+
     try {
-      const { error: authError } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { shouldCreateUser: true }
-      })
-      if (authError) throw authError
-      setStep('otp')
-      toast('Verification code sent to your email!', 'success')
+      if (authMethod === 'phone') {
+        const cleaned = phone.replace(/\D/g, '')
+        if (cleaned.length < 10) {
+          throw new Error('Please enter a valid 11-digit Nigerian WhatsApp phone number (e.g. 08012345678).')
+        }
+        const formattedPhone = formatNigerianPhone(phone)
+        const { error: authError } = await supabase.auth.signInWithOtp({
+          phone: formattedPhone,
+          options: {
+            channel: 'whatsapp',
+            shouldCreateUser: true,
+          },
+        })
+        if (authError) throw authError
+        setStep('otp')
+        toast('6-digit code sent to your WhatsApp! 💚', 'success')
+      } else {
+        if (!email.trim()) return
+        const { error: authError } = await supabase.auth.signInWithOtp({
+          email: email.trim(),
+          options: { shouldCreateUser: true },
+        })
+        if (authError) throw authError
+        setStep('otp')
+        toast('Verification code sent to your email!', 'success')
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to send verification code.')
+      setError(err.message || 'Failed to send verification code. Please check your details.')
     } finally {
       setLoading(false)
     }
@@ -56,19 +95,33 @@ const Auth: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otp.trim(),
-        type: 'email'
-      })
+      let result
+      if (authMethod === 'phone') {
+        const formattedPhone = formatNigerianPhone(phone)
+        result = await supabase.auth.verifyOtp({
+          phone: formattedPhone,
+          token: otp.trim(),
+          type: 'sms',
+        })
+      } else {
+        result = await supabase.auth.verifyOtp({
+          email: email.trim(),
+          token: otp.trim(),
+          type: 'email',
+        })
+      }
+
+      const { data, error: verifyError } = result
       if (verifyError || !data.session) throw verifyError || new Error('Verification failed')
+
       useStore.setState({ token: data.session.access_token })
       await initialize()
+
       const profile = useStore.getState().user
       if (!profile?.business_name) {
         setStep('business')
       } else {
-        trackEvent('auth_completed', { is_returning: true })
+        trackEvent('auth_completed', { is_returning: true, method: authMethod })
         toast('Welcome back to Sabi! 👋', 'success')
         navigate('/today')
       }
@@ -86,7 +139,7 @@ const Auth: React.FC = () => {
     setError(null)
     try {
       await updateProfile({ business_name: businessName.trim() })
-      trackEvent('auth_completed', { is_returning: false, business_name: businessName.trim() })
+      trackEvent('auth_completed', { is_returning: false, business_name: businessName.trim(), method: authMethod })
       toast('Welcome to Sabi! 🚀', 'success')
       navigate('/today')
     } catch (err: any) {
@@ -97,131 +150,335 @@ const Auth: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background text-text-primary flex flex-col p-6 relative overflow-hidden">
-      {/* Background glows */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-success/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-background text-text-primary flex flex-col justify-between p-6 relative overflow-hidden transition-colors duration-200">
+      {/* Background ambient accents */}
+      <div className="absolute -top-32 -left-32 w-80 h-80 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-accent-whatsapp/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Header / Brand */}
-      <div className="mt-10 mb-10 relative">
-        <div className="flex items-center gap-3 mb-6 bg-surface w-fit px-4 py-2.5 rounded-2xl border border-surface-border">
-          <div className="w-7 h-7 bg-accent rounded-lg flex items-center justify-center font-black text-background">
+      {/* Top Header / Brand Nav */}
+      <div className="max-w-md w-full mx-auto flex items-center justify-between pt-2">
+        <Link to="/" className="flex items-center gap-2.5 bg-surface px-3.5 py-2 rounded-2xl border border-surface-border shadow-sm">
+          <div className="w-6 h-6 bg-accent rounded-lg flex items-center justify-center font-black text-white dark:text-background text-xs">
             S
           </div>
-          <span className="text-sm font-bold uppercase tracking-wider text-text-primary font-display">Sabi</span>
+          <span className="text-sm font-bold tracking-tight text-text-primary font-display">sabi</span>
+        </Link>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'light' ? 'Dark' : 'Warm Light'} mode`}
+          className="p-2 rounded-xl bg-surface border border-surface-border text-text-muted hover:text-text-primary transition-all"
+        >
+          {theme === 'light' ? <Moon size={15} /> : <Sun size={15} className="text-accent" />}
+        </button>
+      </div>
+
+      {/* Main Content Container */}
+      <div className="max-w-md w-full mx-auto my-auto py-8">
+        <div className="mb-7">
+          <AnimatePresence mode="wait">
+            {step === 'input' && (
+              <motion.div key="input-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-whatsapp/10 border border-accent-whatsapp/30 text-accent-whatsapp text-[11px] font-mono font-bold mb-3">
+                  <ShieldCheck size={13} />
+                  <span>Zero-Ban WhatsApp Utility</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-text-primary leading-[1.12] mb-2 font-display">
+                  Never lose a sale<br />to a cold chat 💚
+                </h1>
+                <p className="text-text-muted text-sm sm:text-base leading-relaxed">
+                  {authMethod === 'phone'
+                    ? 'Enter your WhatsApp phone number to receive your instant login code.'
+                    : 'Enter your business email address to sign in or get started.'}
+                </p>
+              </motion.div>
+            )}
+
+            {step === 'otp' && (
+              <motion.div key="otp-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent text-[11px] font-mono font-bold mb-3">
+                  <Lock size={13} />
+                  <span>Instant Verification</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-text-primary leading-[1.12] mb-2 font-display">
+                  Enter your 6-digit code 🔐
+                </h1>
+                <p className="text-text-muted text-sm leading-relaxed">
+                  We sent a code to{' '}
+                  <span className="text-text-primary font-bold">
+                    {authMethod === 'phone' ? phone : email}
+                  </span>{' '}
+                  via {authMethod === 'phone' ? 'WhatsApp' : 'email'}.
+                </p>
+              </motion.div>
+            )}
+
+            {step === 'business' && (
+              <motion.div key="biz-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success/15 border border-success/30 text-success text-[11px] font-mono font-bold mb-3">
+                  <Building size={13} />
+                  <span>Store Setup</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-text-primary leading-[1.12] mb-2 font-display">
+                  Name your business 🏪
+                </h1>
+                <p className="text-text-muted text-sm">
+                  What brand or shop name do your WhatsApp customers know you by?
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        <AnimatePresence mode="wait">
-          {step === 'email' && (
-            <motion.div key="email-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <h1 className="text-3xl font-extrabold text-text-primary leading-tight mb-2 font-display">
-                Never lose a sale<br />to a cold chat 💚
-              </h1>
-              <p className="text-text-muted text-sm font-body">
-                Enter your email to sign in or create an account.
-              </p>
-            </motion.div>
-          )}
-          {step === 'otp' && (
-            <motion.div key="otp-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <h1 className="text-3xl font-extrabold text-text-primary leading-tight mb-2 font-display">
-                Check your inbox 🔐
-              </h1>
-              <p className="text-text-muted text-sm">
-                We sent a 6-digit code to <span className="text-text-primary font-semibold">{email}</span>
-              </p>
-            </motion.div>
-          )}
-          {step === 'business' && (
-            <motion.div key="biz-header" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <h1 className="text-3xl font-extrabold text-text-primary leading-tight mb-2 font-display">
-                Name your business 🏪
-              </h1>
-              <p className="text-text-muted text-sm">What is your brand or store name?</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+        {/* Forms */}
+        <div className="bg-surface rounded-3xl border border-surface-border p-6 sm:p-8 shadow-xl">
+          <AnimatePresence mode="wait">
+            {step === 'input' && (
+              <motion.form
+                key="input-form"
+                initial={{ x: -16, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 16, opacity: 0 }}
+                onSubmit={handleSendCode}
+                className="space-y-5"
+              >
+                {authMethod === 'phone' ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+                        WhatsApp Phone Number
+                      </label>
+                      <span className="text-[11px] font-mono text-accent-whatsapp font-bold">
+                        🇳🇬 Nigeria (+234)
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-text-muted font-bold text-sm">
+                        <MessageCircle size={18} className="text-accent-whatsapp" />
+                        <span className="font-mono text-text-primary">+234</span>
+                        <span className="text-surface-border">|</span>
+                      </div>
+                      <input
+                        required
+                        type="tel"
+                        inputMode="numeric"
+                        placeholder="0801 234 5678"
+                        autoFocus
+                        className="w-full bg-surface-2 rounded-2xl border border-surface-border py-4 pl-24 pr-4 text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent transition-all text-base font-mono font-medium shadow-sm"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                    </div>
+                    <p className="text-[11px] text-text-muted ml-1">
+                      We'll send your secure one-time login code straight to your WhatsApp.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+                      <input
+                        required
+                        type="email"
+                        placeholder="vendor@sabi.app"
+                        autoFocus
+                        className="w-full bg-surface-2 rounded-2xl border border-surface-border py-4 pl-11 pr-4 text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent transition-all text-base font-body shadow-sm"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
 
-      {/* Forms */}
-      <div className="flex-1 max-w-sm w-full mx-auto">
-        <AnimatePresence mode="wait">
-          {step === 'email' && (
-            <motion.form key="email-form" initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 20, opacity: 0 }}
-              onSubmit={handleSendMagicLink} className="space-y-5"
-            >
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">Email Address</label>
-                <div className="relative">
-                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input required type="email" placeholder="vendor@sabi.app" autoFocus
-                    className="w-full bg-surface rounded-2xl border border-surface-border py-4 pl-11 pr-4 text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/50 transition-all text-base font-body"
-                    value={email} onChange={(e) => setEmail(e.target.value)}
+                {error && (
+                  <p className="text-danger text-xs font-medium text-center bg-danger/10 p-3 rounded-xl border border-danger/20">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || (authMethod === 'phone' ? phone.length < 9 : !email.trim())}
+                  className="w-full bg-accent text-white dark:text-background font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_4px_25px_rgba(217,119,6,0.25)] hover:opacity-95"
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>{authMethod === 'phone' ? 'Get Started via WhatsApp' : 'Send My Code'}</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+
+                {/* Primary/Secondary Auth Method Toggle */}
+                <div className="pt-2 text-center">
+                  {authMethod === 'phone' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMethod('email')
+                        setError(null)
+                      }}
+                      className="text-xs text-text-muted hover:text-text-primary font-medium transition-colors"
+                    >
+                      Prefer email? <span className="underline text-accent">Sign in with email address</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMethod('phone')
+                        setError(null)
+                      }}
+                      className="text-xs text-text-muted hover:text-text-primary font-medium transition-colors"
+                    >
+                      Use phone? <span className="underline text-accent">Sign in with WhatsApp number</span>
+                    </button>
+                  )}
+                </div>
+              </motion.form>
+            )}
+
+            {step === 'otp' && (
+              <motion.div
+                key="otp-form"
+                initial={{ x: 16, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -16, opacity: 0 }}
+                className="space-y-5"
+              >
+                <div>
+                  <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1 mb-2 block">
+                    Enter 6-digit code
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    inputMode="numeric"
+                    placeholder="123456"
+                    autoFocus
+                    className="w-full bg-surface-2 rounded-2xl border border-surface-border py-4 text-center text-2xl font-mono font-extrabold text-accent outline-none focus:border-accent transition-all tracking-[0.25em]"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   />
                 </div>
-              </div>
-              {error && <p className="text-danger text-xs font-medium text-center bg-danger/10 p-3 rounded-xl border border-danger/20">{error}</p>}
-              <button type="submit" disabled={loading || !email.trim()}
-                className="w-full bg-accent text-background font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(255,176,32,0.2)]"
-              >
-                {loading ? <div className="w-6 h-6 border-3 border-background border-t-transparent rounded-full animate-spin" />
-                  : <><span>Send Login Code</span><ArrowRight size={20} /></>}
-              </button>
-            </motion.form>
-          )}
 
-          {step === 'otp' && (
-            <motion.div key="otp-form" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-5">
-              <div>
-                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1 mb-2 block">6-digit code</label>
-                <input type="text" maxLength={6} inputMode="numeric" placeholder="123456" autoFocus
-                  className="w-full bg-surface rounded-2xl border border-surface-border py-4 text-center text-2xl font-mono font-bold text-accent outline-none focus:border-accent transition-all"
-                  value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                />
-              </div>
-              {error && <p className="text-danger text-xs font-medium text-center bg-danger/10 p-3 rounded-xl border border-danger/20">{error}</p>}
-              <button onClick={handleVerifyOtp} disabled={otp.length < 6 || loading}
-                className="w-full bg-accent text-background font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(255,176,32,0.2)]"
-              >
-                {loading ? <div className="w-6 h-6 border-3 border-background border-t-transparent rounded-full animate-spin" />
-                  : <><span>Verify & Sign In</span><CheckCircle2 size={20} /></>}
-              </button>
-              <div className="flex flex-col items-center gap-2 pt-2">
-                <button onClick={() => { setStep('email'); setOtp(''); setError(null) }}
-                  className="text-xs font-medium text-text-muted hover:text-text-primary flex items-center gap-1"
-                ><ChevronLeft size={14} /> Back to Email</button>
-              </div>
-            </motion.div>
-          )}
+                {error && (
+                  <p className="text-danger text-xs font-medium text-center bg-danger/10 p-3 rounded-xl border border-danger/20">
+                    {error}
+                  </p>
+                )}
 
-          {step === 'business' && (
-            <motion.form key="business-form" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }}
-              onSubmit={handleSetBusiness} className="space-y-5"
-            >
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">Business Name</label>
-                <div className="relative">
-                  <Building size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-                  <input required type="text" placeholder="e.g. Chidinma Couture" autoFocus
-                    className="w-full bg-surface rounded-2xl border border-surface-border py-4 pl-11 pr-4 text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/50 transition-all text-base font-body"
-                    value={businessName} onChange={(e) => setBusinessName(e.target.value)}
-                  />
+                <button
+                  onClick={handleVerifyOtp}
+                  disabled={otp.length < 6 || loading}
+                  className="w-full bg-accent text-white dark:text-background font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_4px_25px_rgba(217,119,6,0.25)] hover:opacity-95"
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Verify & Continue</span>
+                      <CheckCircle2 size={18} />
+                    </>
+                  )}
+                </button>
+
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setStep('input')
+                      setOtp('')
+                      setError(null)
+                    }}
+                    className="text-xs font-medium text-text-muted hover:text-text-primary flex items-center gap-1"
+                  >
+                    <ChevronLeft size={14} /> Back to {authMethod === 'phone' ? 'Phone Number' : 'Email'}
+                  </button>
                 </div>
-              </div>
-              {error && <p className="text-danger text-xs font-medium text-center bg-danger/10 p-3 rounded-xl border border-danger/20">{error}</p>}
-              <button type="submit" disabled={loading || !businessName.trim()}
-                className="w-full bg-success text-background font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+              </motion.div>
+            )}
+
+            {step === 'business' && (
+              <motion.form
+                key="business-form"
+                initial={{ x: 16, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -16, opacity: 0 }}
+                onSubmit={handleSetBusiness}
+                className="space-y-5"
               >
-                {loading ? <div className="w-6 h-6 border-3 border-background border-t-transparent rounded-full animate-spin" />
-                  : <><span>Complete Setup</span><ArrowRight size={20} /></>}
-              </button>
-            </motion.form>
-          )}
-        </AnimatePresence>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+                    Store or Business Name
+                  </label>
+                  <div className="relative">
+                    <Building size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. Chidinma Lace Hub, Tunde Gadgets"
+                      autoFocus
+                      className="w-full bg-surface-2 rounded-2xl border border-surface-border py-4 pl-11 pr-4 text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent transition-all text-base font-body shadow-sm"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="text-danger text-xs font-medium text-center bg-danger/10 p-3 rounded-xl border border-danger/20">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || !businessName.trim()}
+                  className="w-full bg-success text-white font-extrabold py-4 rounded-2xl text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 shadow-[0_4px_25px_rgba(5,150,105,0.25)] hover:opacity-95"
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Open My Sabi Dashboard</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          {/* Subtle Trust Signals */}
+          <div className="pt-6 mt-6 border-t border-surface-border flex items-center justify-center gap-3">
+            <div className="flex -space-x-2">
+              <span className="w-7 h-7 rounded-full bg-accent/20 border-2 border-surface flex items-center justify-center text-[10px] font-bold text-accent">
+                AO
+              </span>
+              <span className="w-7 h-7 rounded-full bg-accent-whatsapp/20 border-2 border-surface flex items-center justify-center text-[10px] font-bold text-accent-whatsapp">
+                TB
+              </span>
+              <span className="w-7 h-7 rounded-full bg-gold/20 border-2 border-surface flex items-center justify-center text-[10px] font-bold text-gold">
+                BE
+              </span>
+            </div>
+            <p className="text-[11px] text-text-muted font-medium">
+              Join <span className="text-text-primary font-bold">1,000+ Nigerian vendors</span> tracking millions in recovered sales.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="pb-4 text-center">
-        <p className="text-[10px] text-text-muted/60 uppercase tracking-widest font-medium">Sabi Revenue Memory • v1.0</p>
+      {/* Humanized Merchant Trust Footer */}
+      <div className="pb-2 text-center text-xs text-text-muted flex items-center justify-center gap-2">
+        <Lock size={12} className="text-accent-whatsapp shrink-0" />
+        <span>Securing sales for merchants across Lagos, Abuja, Port Harcourt & Aba</span>
       </div>
     </div>
   )
