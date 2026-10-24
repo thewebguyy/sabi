@@ -1,20 +1,62 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, CheckCircle2, XCircle, Copy, ExternalLink, Sparkles, Clipboard, Clock, AlertCircle } from 'lucide-react'
+import { MessageCircle, CheckCircle2, XCircle, Copy, ExternalLink, Sparkles, AlertCircle } from 'lucide-react'
 import { trackEvent } from '../../lib/analytics'
 
 type TabKey = 'today' | 'followup' | 'capture'
 
+const mockDeals = [
+  {
+    name: 'Tunde B.',
+    product: 'iPhone 13 128GB Blue',
+    amount: '₦420,000',
+    quiet: 'quiet for 28 hrs',
+    constraint: 'Hold till 4pm · Ikeja Computer Village pickup',
+    followupDraft:
+      'Hi Tunde! Checking in on the blue iPhone 13 (128GB) at ₦420,000. Another buyer is asking at the shop, but keeping it set aside for you first. Still picking up today? 😊',
+  },
+  {
+    name: 'Amaka O.',
+    product: 'Burgundy Swiss Lace (5 yds)',
+    amount: '₦60,000',
+    quiet: 'quiet for 2 days',
+    constraint: 'Dispatch to Lekki Phase 1',
+    followupDraft:
+      'Good afternoon Amaka! Just checking in on the burgundy Swiss lace at ₦60,000. Dispatches for Lekki leave at 2pm. Should I include yours today?',
+  },
+  {
+    name: 'Blessing E.',
+    product: '28" Bone Straight Wig',
+    amount: '₦185,000',
+    quiet: 'quiet for 3 days',
+    constraint: 'Waybill to Abuja via Peace Mass',
+    followupDraft:
+      'Hello Blessing dear! Quick follow-up on your 28" bone straight wig order (₦185,000). Waybill dispatch is heading out shortly. Let me know if you are ready! 💕',
+  },
+  {
+    name: 'Dr. Femi',
+    product: 'Small Chops 50-Pack Platter',
+    amount: '₦45,000',
+    quiet: 'quiet for 48 hrs',
+    constraint: 'Surulere clinic Saturday delivery',
+    followupDraft:
+      'Good afternoon Dr. Femi! Checking in regarding the 50-pack small chops for Saturday (₦45,000). Chef needs to finalize the weekend prep list today. Best regards!',
+  },
+]
+
 const ProductScreenshots: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('today')
+  const [selectedDealIndex, setSelectedDealIndex] = useState(0)
 
   const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab)
     trackEvent('product_screenshot_interaction', { tab })
   }
 
+  const activeDeal = mockDeals[selectedDealIndex]
+
   return (
-    <section className="py-20 px-6 border-t border-[#1C221E]" id="product">
+    <section className="py-20 px-6 border-t border-surface-border" id="product">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-10 space-y-3">
@@ -23,18 +65,18 @@ const ProductScreenshots: React.FC = () => {
             Built from the actual Sabi codebase.
           </h2>
           <p className="text-base text-text-muted">
-            No marketing renders or exaggerated concepts. This is the exact layout, tokens, and controls you use inside the app.
+            No marketing renders or fake mockups. This is the exact layout, typography, and controls you use to recover quiet sales.
           </p>
         </div>
 
         {/* Tab Selector */}
         <div className="flex justify-center mb-8">
-          <div className="inline-flex p-1 rounded-xl bg-[#121513] border border-[#232B25] gap-1">
+          <div className="inline-flex p-1 rounded-xl bg-surface border border-surface-border gap-1 shadow-sm">
             <button
               onClick={() => handleTabChange('today')}
               className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 activeTab === 'today'
-                  ? 'bg-accent text-background shadow'
+                  ? 'bg-accent text-white dark:text-background shadow'
                   : 'text-text-muted hover:text-text-primary'
               }`}
             >
@@ -44,7 +86,7 @@ const ProductScreenshots: React.FC = () => {
               onClick={() => handleTabChange('followup')}
               className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 activeTab === 'followup'
-                  ? 'bg-accent text-background shadow'
+                  ? 'bg-accent text-white dark:text-background shadow'
                   : 'text-text-muted hover:text-text-primary'
               }`}
             >
@@ -54,7 +96,7 @@ const ProductScreenshots: React.FC = () => {
               onClick={() => handleTabChange('capture')}
               className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 activeTab === 'capture'
-                  ? 'bg-accent text-background shadow'
+                  ? 'bg-accent text-white dark:text-background shadow'
                   : 'text-text-muted hover:text-text-primary'
               }`}
             >
@@ -65,11 +107,11 @@ const ProductScreenshots: React.FC = () => {
 
         {/* Phone Frame representation */}
         <div className="max-w-md mx-auto">
-          <div className="bg-[#121513] rounded-2xl border border-[#232B25] overflow-hidden shadow-2xl">
+          <div className="bg-surface rounded-2xl border border-surface-border overflow-hidden shadow-2xl">
             {/* Phone Top Bar */}
-            <div className="bg-[#0A0D0B] px-5 py-3 border-b border-[#1F2521] flex items-center justify-between">
+            <div className="bg-surface-2 px-5 py-3 border-b border-surface-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-accent text-background font-mono font-black text-[10px] flex items-center justify-center">
+                <span className="w-5 h-5 rounded bg-accent text-white dark:text-background font-mono font-black text-[10px] flex items-center justify-center">
                   S
                 </span>
                 <span className="font-display font-extrabold text-xs text-text-primary">
@@ -77,13 +119,13 @@ const ProductScreenshots: React.FC = () => {
                 </span>
                 <span className="text-[10px] font-mono text-text-muted">· Today</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-[#171C19] border border-white/5 px-2 py-0.5 rounded text-[10px] text-accent font-mono">
-                <span>4 DEALS</span>
+              <div className="flex items-center gap-1.5 bg-surface border border-surface-border px-2 py-0.5 rounded text-[10px] text-accent font-mono">
+                <span>₦710,000 ACTIVE</span>
               </div>
             </div>
 
             {/* Screen Content Switcher */}
-            <div className="p-4 sm:p-5 bg-[#0A0D0B] min-h-[480px] flex flex-col justify-between">
+            <div className="p-4 sm:p-5 bg-background min-h-[500px] flex flex-col justify-between">
               <AnimatePresence mode="wait">
                 {activeTab === 'today' && (
                   <motion.div
@@ -93,56 +135,34 @@ const ProductScreenshots: React.FC = () => {
                     exit={{ opacity: 0, y: -6 }}
                     className="space-y-3"
                   >
-                    {/* Header Metric Box (matches Today.tsx exactly) */}
-                    <div className="bg-[#141414] rounded-2xl border border-[#262626] p-4 relative overflow-hidden">
+                    {/* Header Metric Box */}
+                    <div className="bg-surface rounded-2xl border border-surface-border p-4 relative overflow-hidden shadow-sm">
                       <div className="absolute top-0 right-0 w-24 h-24 bg-accent/10 rounded-full blur-xl pointer-events-none" />
                       <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">
                         Total Open Value
                       </p>
                       <p className="font-mono text-2xl font-extrabold text-accent">
-                        ₦385,000
+                        ₦710,000
                       </p>
-                      <p className="text-[10px] text-text-muted mt-0.5">in open opportunities</p>
+                      <p className="text-[10px] text-text-muted mt-0.5">across 4 quiet conversations</p>
 
-                      <div className="mt-3 pt-3 border-t border-[#262626] flex items-center justify-between">
+                      <div className="mt-3 pt-3 border-t border-surface-border flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                           <span className="text-[11px] font-semibold text-text-primary">
-                            4 conversations need attention
+                            4 deals need follow-up today
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold text-accent">+ Capture</span>
+                        <span className="text-[11px] font-bold text-accent">+ Quick Paste</span>
                       </div>
                     </div>
 
-                    {/* Deal Cards (matches Today.tsx deal row structure) */}
+                    {/* Deal Cards across Fashion, Tech, Hair, Food */}
                     <div className="space-y-2.5">
-                      {[
-                        {
-                          name: 'Amaka O.',
-                          product: 'Burgundy Lace (5 yds)',
-                          amount: '₦60,000',
-                          quiet: 'quiet for 2 days',
-                          constraint: 'Deliver to Lekki Phase 1',
-                        },
-                        {
-                          name: 'Chidera K.',
-                          product: 'Swiss Voile Bundle',
-                          amount: '₦145,000',
-                          quiet: 'quiet for 3 days',
-                          constraint: 'Waiting for account details',
-                        },
-                        {
-                          name: 'Funke A.',
-                          product: 'Ankara Wedding Set',
-                          amount: '₦180,000',
-                          quiet: 'quiet for 5 days',
-                          constraint: '',
-                        },
-                      ].map((deal, idx) => (
+                      {mockDeals.map((deal, idx) => (
                         <div
                           key={idx}
-                          className="bg-[#141414] border border-[#262626] rounded-2xl p-3.5 space-y-2"
+                          className="bg-surface border border-surface-border rounded-2xl p-3.5 space-y-2 shadow-sm"
                         >
                           <div className="flex justify-between items-start">
                             <div>
@@ -160,7 +180,7 @@ const ProductScreenshots: React.FC = () => {
                           </div>
 
                           {deal.constraint && (
-                            <div className="flex items-center gap-1.5 bg-[#0A0A0A] px-2.5 py-1 rounded-lg border border-[#262626] text-[10px] text-text-muted">
+                            <div className="flex items-center gap-1.5 bg-surface-2 px-2.5 py-1 rounded-lg border border-surface-border text-[10px] text-text-muted">
                               <AlertCircle size={11} className="text-accent shrink-0" />
                               <span className="truncate">{deal.constraint}</span>
                             </div>
@@ -168,21 +188,24 @@ const ProductScreenshots: React.FC = () => {
 
                           <div className="flex items-center gap-2 pt-0.5">
                             <button
-                              onClick={() => handleTabChange('followup')}
+                              onClick={() => {
+                                setSelectedDealIndex(idx)
+                                handleTabChange('followup')
+                              }}
                               className="flex-1 bg-[#25D366] text-[#0A0A0A] font-extrabold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(37,211,102,0.15)] active:scale-95 transition-all"
                             >
                               <MessageCircle size={12} />
-                              <span>Follow Up</span>
+                              <span>Follow Up ({deal.amount})</span>
                             </button>
                             <button
                               title="Mark Won"
-                              className="bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 p-2 rounded-xl"
+                              className="bg-success/15 text-success border border-success/30 p-2 rounded-xl"
                             >
                               <CheckCircle2 size={13} />
                             </button>
                             <button
                               title="Mark Lost"
-                              className="bg-[#EF4444]/15 text-[#EF4444] border border-[#EF4444]/30 p-2 rounded-xl"
+                              className="bg-danger/15 text-danger border border-danger/30 p-2 rounded-xl"
                             >
                               <XCircle size={13} />
                             </button>
@@ -201,31 +224,37 @@ const ProductScreenshots: React.FC = () => {
                     exit={{ opacity: 0, y: -6 }}
                     className="space-y-4"
                   >
-                    {/* Follow-Up Sheet modal representation (matches FollowUpSheet.tsx) */}
-                    <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4 space-y-3.5">
-                      <div className="flex justify-between items-start pb-2.5 border-b border-[#262626]">
+                    <div className="bg-surface border border-surface-border rounded-2xl p-4 space-y-3.5 shadow-sm">
+                      <div className="flex justify-between items-start pb-2.5 border-b border-surface-border">
                         <div>
-                          <h4 className="text-xs font-bold text-text-primary">Follow Up with Amaka O.</h4>
-                          <p className="text-[10px] text-text-muted mt-0.5">Burgundy Lace (5 yds) • ₦60,000</p>
+                          <h4 className="text-xs font-bold text-text-primary">
+                            Follow Up with {activeDeal.name}
+                          </h4>
+                          <p className="text-[10px] text-text-muted mt-0.5">
+                            {activeDeal.product} • {activeDeal.amount}
+                          </p>
                         </div>
-                        <span className="w-6 h-6 rounded-full bg-[#1F1F1F] text-text-muted text-[10px] flex items-center justify-center">
+                        <button
+                          onClick={() => handleTabChange('today')}
+                          className="w-6 h-6 rounded-full bg-surface-2 text-text-muted text-[10px] flex items-center justify-center"
+                        >
                           ✕
-                        </span>
+                        </button>
                       </div>
 
                       <div className="space-y-1.5">
                         <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider">
-                          Suggested Message
+                          Personalized Pre-Composed Message
                         </label>
-                        <div className="bg-[#0A0A0A] border border-[#262626] rounded-xl p-3 text-[11px] text-text-primary leading-relaxed">
-                          "Hi Amaka! Just checking in on your order for Burgundy Lace (5 yds) at ₦60,000. Let me know if you are still taking it so I can reserve it for you today! 😊"
+                        <div className="bg-surface-2 border border-surface-border rounded-xl p-3 text-[11px] text-text-primary leading-relaxed">
+                          "{activeDeal.followupDraft}"
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 pt-1">
-                        <button className="bg-[#1F1F1F] text-text-primary font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5">
+                        <button className="bg-surface-2 text-text-primary font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 border border-surface-border">
                           <Copy size={12} />
-                          <span>Copy Text</span>
+                          <span>Copy Draft</span>
                         </button>
                         <button className="bg-[#25D366] text-[#0A0A0A] font-extrabold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 shadow-md">
                           <ExternalLink size={12} />
@@ -234,8 +263,31 @@ const ProductScreenshots: React.FC = () => {
                       </div>
 
                       <p className="font-mono text-[9px] text-center text-text-muted">
-                        Opens your regular WhatsApp with Amaka's chat and message ready.
+                        Opens your official WhatsApp with {activeDeal.name}'s chat and message ready.
                       </p>
+                    </div>
+
+                    {/* Quick deal selector */}
+                    <div className="pt-2 border-t border-surface-border space-y-1.5">
+                      <p className="font-mono text-[9px] text-text-muted uppercase tracking-wider">
+                        Switch active customer:
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {mockDeals.map((d, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedDealIndex(idx)}
+                            className={`p-1.5 rounded-lg text-[10px] font-bold text-left border transition-all ${
+                              selectedDealIndex === idx
+                                ? 'bg-accent/15 border-accent text-accent'
+                                : 'bg-surface border-surface-border text-text-muted'
+                            }`}
+                          >
+                            <span className="block truncate">{d.name}</span>
+                            <span className="font-mono text-[9px] block opacity-80">{d.amount}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -248,43 +300,42 @@ const ProductScreenshots: React.FC = () => {
                     exit={{ opacity: 0, y: -6 }}
                     className="space-y-3"
                   >
-                    {/* Capture Screen representation (matches Capture.tsx) */}
-                    <div className="bg-[#141414] border border-[#262626] rounded-2xl p-3.5 space-y-2.5">
+                    <div className="bg-surface border border-surface-border rounded-2xl p-3.5 space-y-2.5 shadow-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                          Fast Paste
+                          Fast WhatsApp Paste
                         </span>
                         <span className="text-[9px] font-mono text-accent">5 SECONDS</span>
                       </div>
 
-                      <div className="bg-[#0A0A0A] border border-[#262626] rounded-xl p-3 font-mono text-[10px] text-text-muted leading-relaxed">
-                        [10:32 AM] Amaka: Hi Sis, is the burgundy lace available? 5 yards.<br />
-                        [10:45 AM] You: Yes oh! ₦60,000 total for 5 yards. Send your address.
+                      <div className="bg-surface-2 border border-surface-border rounded-xl p-3 font-mono text-[10px] text-text-muted leading-relaxed">
+                        [11:04 AM] Tunde: Bro, what's your last price for the clean iPhone 13 128GB blue?<br />
+                        [11:15 AM] You: ₦420,000 last with receipt and charger. Can hold it till 4pm.
                       </div>
 
-                      <div className="bg-accent text-background font-extrabold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1.5">
+                      <div className="bg-accent text-white dark:text-background font-extrabold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1.5">
                         <Sparkles size={13} />
-                        <span>Deal Details Extracted</span>
+                        <span>Deal Automatically Recognized</span>
                       </div>
                     </div>
 
-                    <div className="bg-[#141414] border border-[#262626] rounded-2xl p-3 space-y-2 text-xs">
-                      <p className="font-mono text-[9px] font-bold text-[#10B981] uppercase tracking-wider">
+                    <div className="bg-surface border border-surface-border rounded-2xl p-3 space-y-2 text-xs shadow-sm">
+                      <p className="font-mono text-[9px] font-bold text-success uppercase tracking-wider">
                         ✓ Extracted Fields
                       </p>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="p-2 rounded-xl bg-[#0A0A0A] border border-[#262626]">
+                        <div className="p-2 rounded-xl bg-surface-2 border border-surface-border">
                           <p className="font-mono text-[8px] text-text-muted uppercase">Customer</p>
-                          <p className="font-bold text-text-primary text-[11px]">Amaka O.</p>
+                          <p className="font-bold text-text-primary text-[11px]">Tunde B.</p>
                         </div>
-                        <div className="p-2 rounded-xl bg-[#0A0A0A] border border-[#262626]">
+                        <div className="p-2 rounded-xl bg-surface-2 border border-surface-border">
                           <p className="font-mono text-[8px] text-text-muted uppercase">Agreed Price</p>
-                          <p className="font-mono font-bold text-accent text-[11px]">₦60,000</p>
+                          <p className="font-mono font-bold text-accent text-[11px]">₦420,000</p>
                         </div>
                       </div>
-                      <div className="p-2 rounded-xl bg-[#0A0A0A] border border-[#262626]">
+                      <div className="p-2 rounded-xl bg-surface-2 border border-surface-border">
                         <p className="font-mono text-[8px] text-text-muted uppercase">Product</p>
-                        <p className="font-bold text-text-primary text-[11px]">Burgundy Lace (5 yds)</p>
+                        <p className="font-bold text-text-primary text-[11px]">Refurbished iPhone 13 (128GB Blue)</p>
                       </div>
                     </div>
                   </motion.div>
@@ -292,7 +343,7 @@ const ProductScreenshots: React.FC = () => {
               </AnimatePresence>
 
               {/* Bottom annotation */}
-              <div className="pt-3 border-t border-[#1F2521] text-center">
+              <div className="pt-3 border-t border-surface-border text-center">
                 <span className="font-mono text-[9px] text-text-muted">
                   ACTUAL SABI INTERFACE TOKENS · RUNS IN MOBILE BROWSER
                 </span>

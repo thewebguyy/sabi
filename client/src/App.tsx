@@ -12,6 +12,7 @@ import Settings from './pages/Settings'
 import Capture from './pages/Capture'
 
 import { ToastProvider } from './context/ToastContext'
+import { ThemeProvider } from './context/ThemeContext'
 import ErrorBoundary from './components/ErrorBoundary'
 
 /**
@@ -77,31 +78,33 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* Public — Landing & Auth */}
-            <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/pricing" element={<Pricing />} />
+      <ThemeProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* Public — Landing & Auth */}
+              <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/pricing" element={<Pricing />} />
 
-            {/* Protected — with 3-tab bottom nav layout */}
-            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-              <Route path="/today" element={<Today />} />
-              <Route path="/deals" element={<Deals />} />
-              <Route path="/settings" element={<Settings />} />
-            </Route>
+              {/* Protected — with 3-tab bottom nav layout */}
+              <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+                <Route path="/today" element={<Today />} />
+                <Route path="/deals" element={<Deals />} />
+                <Route path="/settings" element={<Settings />} />
+              </Route>
 
-            {/* Protected — full screen modal/action routes */}
-            <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
-              <Route path="/capture" element={<div className="min-h-screen bg-background text-text-primary p-4 max-w-md mx-auto"><Capture /></div>} />
-            </Route>
+              {/* Protected — full screen modal/action routes */}
+              <Route element={<ProtectedRoute><Outlet /></ProtectedRoute>}>
+                <Route path="/capture" element={<div className="min-h-screen bg-background text-text-primary p-4 max-w-md mx-auto"><Capture /></div>} />
+              </Route>
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </ToastProvider>
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </ToastProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

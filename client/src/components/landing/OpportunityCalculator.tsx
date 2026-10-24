@@ -30,7 +30,7 @@ const OpportunityCalculator: React.FC = () => {
   const potentialDealsPerMonth = Math.round(dailyChats * (coldPercent / 100) * SELLING_DAYS)
 
   return (
-    <section className="py-20 px-6 border-t border-[#1C221E]" id="calculator">
+    <section className="py-20 px-6 border-t border-surface-border" id="calculator">
       <div className="max-w-5xl mx-auto">
         <div className="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
           {/* Left Column: Editorial framing */}
@@ -42,19 +42,19 @@ const OpportunityCalculator: React.FC = () => {
             <p className="text-base sm:text-lg text-text-muted leading-relaxed">
               Customers rarely say "I'm not buying anymore." They simply get distracted, and you get busy. When a chat is left alone for 48 hours, that conversation quietly dies.
             </p>
-            <div className="p-4 rounded-xl bg-[#121513] border border-[#232B25] space-y-2">
+            <div className="p-4 rounded-xl bg-surface border border-surface-border space-y-2 shadow-sm">
               <p className="font-mono text-xs font-bold text-accent uppercase tracking-wider">
                 Transparent calculation · You control assumptions
               </p>
               <p className="text-xs text-text-muted leading-relaxed">
-                Formula: <span className="font-mono text-text-primary">Inquiries/day × Avg Order × Quiet % × Assumed 26 trade days</span>. You set the figures that match your business.
+                Formula: <span className="font-mono text-text-primary font-bold">Inquiries/day × Avg Order × Quiet % × 26 trade days</span>. You set the figures that match your business.
               </p>
             </div>
           </div>
 
           {/* Right Column: Calculator Widget */}
           <div className="lg:col-span-7">
-            <div className="bg-[#121513] rounded-2xl border border-[#232B25] p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div className="bg-surface rounded-2xl border border-surface-border p-6 sm:p-8 space-y-6 shadow-xl">
               {/* Slider 1: Daily chats */}
               <div className="space-y-2">
                 <div className="flex justify-between items-baseline">
@@ -140,30 +140,27 @@ const OpportunityCalculator: React.FC = () => {
                 </div>
               </div>
 
-              {/* Output Readout */}
-              <div className="bg-[#0A0D0B] border border-accent/30 rounded-xl p-5 sm:p-6 text-center space-y-2.5">
-                <p className="editorial-kicker text-text-muted">
-                  POTENTIAL OPPORTUNITY WORTH FOLLOWING UP
-                </p>
-                <p className="font-mono text-3xl sm:text-5xl font-extrabold text-accent">
-                  {formatNaira(monthlyOpportunity())}
-                  <span className="text-sm font-normal text-text-muted font-sans ml-1">/ month</span>
-                </p>
-
-                {/* Explicit breakdown formula */}
-                <div className="pt-2 border-t border-[#1F2521] text-xs font-mono text-text-muted space-y-1">
-                  <p>
-                    {dailyChats} chats × {formatNaira(avgOrderValue)} × {coldPercent}% × {SELLING_DAYS} days
-                  </p>
-                  <p className="text-[#8E9490]">
-                    ≈ {potentialDealsPerMonth} customer conversations worth checking back on each month
+              {/* Monthly Loss Display */}
+              <div className="pt-4 border-t border-surface-border space-y-3">
+                <div className="p-4 sm:p-5 rounded-xl bg-surface-2 border border-surface-border">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-mono text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                        POTENTIAL QUIET VALUE PER MONTH
+                      </p>
+                      <p className="font-mono text-3xl sm:text-4xl font-extrabold text-accent mt-1">
+                        {formatNaira(monthlyOpportunity())}
+                      </p>
+                    </div>
+                    <span className="font-mono text-[10px] text-accent bg-accent/10 border border-accent/30 px-2 py-0.5 rounded font-bold">
+                      ~{potentialDealsPerMonth} DEALS
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-muted mt-2">
+                    Across 26 trade days, approximately {potentialDealsPerMonth} interested customers quietly disappear without completing payment.
                   </p>
                 </div>
               </div>
-
-              <p className="text-center font-mono text-[10px] text-text-muted">
-                ILLUSTRATIVE OPPORTUNITY BASED ON YOUR ASSUMPTIONS · NOT GUARANTEED REVENUE
-              </p>
             </div>
           </div>
         </div>

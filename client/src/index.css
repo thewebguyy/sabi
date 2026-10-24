@@ -5,14 +5,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Warm Merchant Light Palette (Default) ─── */
 :root {
+  color-scheme: light;
+  --color-bg: #FBFBF9;            /* Warm porcelain canvas */
+  --color-surface: #FFFFFF;       /* Crisp white elevated card surface */
+  --color-surface-2: #F4F3EE;     /* Soft warm sand / secondary surface */
+  --color-border: #E8E6DF;        /* Crisp high-contrast surface border */
+  --color-text-primary: #121915;  /* Deep merchant obsidian text */
+  --color-text-muted: #5C6660;    /* High contrast secondary gray (WCAG AA compliant) */
+  --color-accent: #D97706;        /* Warm merchant gold / amber */
+  --color-whatsapp: #128C7E;      /* Deep WhatsApp trust teal */
+  --color-forest: #075E54;        /* Deep WhatsApp forest green */
+  --color-gold: #B45309;          /* Rich gold */
+  --color-success: #059669;       /* Emerald success */
+  --color-danger: #DC2626;        /* High-visibility alert red */
+  --color-primary: #075E54;       /* Primary brand forest */
+}
+
+/* ─── Dark Mode (Night Mode / Legacy Preference) ─── */
+.dark {
   color-scheme: dark;
+  --color-bg: #0A0D0B;
+  --color-surface: #121513;
+  --color-surface-2: #181D1A;
+  --color-border: #232B25;
+  --color-text-primary: #F3F2EF;
+  --color-text-muted: #A1A1AA;    /* Elevated from #71717A for WCAG AA compliance */
+  --color-accent: #FFB020;
+  --color-whatsapp: #25D366;
+  --color-forest: #128C7E;
+  --color-gold: #F59E0B;
+  --color-success: #10B981;
+  --color-danger: #EF4444;
+  --color-primary: #0A3828;
 }
 
 body {
-  @apply bg-[#0A0D0B] text-text-primary antialiased;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
   font-family: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  background-attachment: fixed;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Display headings — Bricolage Grotesque for human editorial character */
@@ -26,30 +60,35 @@ h1, h2, h3, .font-display {
   letter-spacing: -0.02em;
 }
 
-/* Custom Scrollbar for Dark Theme */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0A0D0B;
+  background: var(--color-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1F2521;
+  background: var(--color-border);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2E3832;
+  background: var(--color-text-muted);
 }
 
-/* Subtle glassmorphism — used sparingly on fixed nav only */
+/* Subtle glassmorphism */
 .glass {
-  background: rgba(10, 13, 11, 0.88);
+  background: rgba(251, 251, 249, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dark .glass {
+  background: rgba(10, 13, 11, 0.88);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -71,45 +110,89 @@ h1, h2, h3, .font-display {
 
 /* ─── Editorial Brand Components ─── */
 
-/* Chat simulator bubbles with intentional asymmetry */
+/* Chat simulator bubbles */
 .chat-bubble-incoming {
-  @apply bg-[#171B18] text-[#F3F2EF] px-4 py-3 text-[14px] sm:text-[15px] leading-relaxed border border-white/5;
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+  font-size: 14px;
+  line-height: 1.5;
   border-radius: 2px 14px 14px 14px;
   max-width: 90%;
 }
 
 .chat-bubble-outgoing {
-  background: #0D2C20;
-  @apply text-[#F3F2EF] px-4 py-3 text-[14px] sm:text-[15px] leading-relaxed border border-[#1A4B37];
+  background: #E7F6F1;
+  color: #075E54;
+  border: 1px solid #C4E9DD;
+  padding: 0.75rem 1rem;
+  font-size: 14px;
+  line-height: 1.5;
   border-radius: 14px 2px 14px 14px;
   max-width: 90%;
 }
 
+.dark .chat-bubble-outgoing {
+  background: #0D2C20;
+  color: #F3F2EF;
+  border: 1px solid #1A4B37;
+}
+
 /* Phone frame for live UI representations */
 .phone-frame {
-  @apply border border-[#232B25] bg-[#0A0D0B] overflow-hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  overflow: hidden;
   border-radius: 1.25rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+}
+
+.dark .phone-frame {
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 /* Editorial badge */
 .editorial-kicker {
-  @apply text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-[#A3A8A4];
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-text-muted);
 }
 
 /* Sabi slider */
 input[type="range"].sabi-slider {
-  @apply appearance-none w-full h-1.5 rounded-full bg-[#1F2521] outline-none cursor-pointer;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-border);
+  outline: none;
+  cursor: pointer;
 }
 input[type="range"].sabi-slider::-webkit-slider-thumb {
-  @apply appearance-none w-5 h-5 rounded-full bg-[#FFB020] cursor-pointer shadow-md;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s ease;
 }
 input[type="range"].sabi-slider::-webkit-slider-thumb:hover {
   transform: scale(1.15);
 }
 input[type="range"].sabi-slider::-moz-range-thumb {
-  @apply w-5 h-5 rounded-full bg-[#FFB020] cursor-pointer border-none shadow-md;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 /* Reduced motion support */

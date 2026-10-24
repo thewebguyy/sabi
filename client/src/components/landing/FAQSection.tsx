@@ -11,7 +11,7 @@ interface FAQItemProps {
 }
 
 const FAQItem: React.FC<FAQItemProps> = ({ question, answer, isOpen, onToggle }) => (
-  <div className="border-b border-[#1F2521] last:border-b-0">
+  <div className="border-b border-surface-border last:border-b-0">
     <button
       onClick={onToggle}
       className="w-full flex items-center justify-between py-5 text-left group focus:outline-none"
@@ -86,7 +86,7 @@ const FAQSection: React.FC = () => {
   }
 
   return (
-    <section className="py-20 px-6 border-t border-[#1C221E]" id="faq">
+    <section className="py-20 px-6 border-t border-surface-border" id="faq">
       <div className="max-w-4xl mx-auto">
         <div className="mb-12 space-y-3">
           <p className="editorial-kicker text-accent">Questions & Answers</p>
@@ -98,7 +98,7 @@ const FAQSection: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-[#121513] rounded-2xl border border-[#232B25] px-6 sm:px-8">
+        <div className="bg-surface rounded-2xl border border-surface-border px-6 sm:px-8 shadow-sm">
           {faqs.map((faq, i) => (
             <FAQItem
               key={i}
