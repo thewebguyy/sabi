@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Check, ArrowLeft, Briefcase, Zap } from 'lucide-react'
+import { Check, ArrowLeft, Briefcase, Zap, ShieldCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { trackEvent } from '../lib/analytics'
 
@@ -29,12 +29,12 @@ const plans: PlanConfig[] = [
     isPrimary: false,
     features: [
       { text: 'Track up to 15 active conversations' },
-      { text: 'Smart follow-up reminder alerts' },
+      { text: 'Smart 48-hour follow-up alerts' },
       { text: 'Paste-to-capture deal extraction' },
       { text: '1-tap WhatsApp message deep-links' },
       { text: 'Works in Safari, Chrome & mobile browser' },
     ],
-    ctaText: 'Start Free',
+    ctaText: 'Start Free — 15 Slots',
   },
   {
     title: 'Pilot Pro',
@@ -61,7 +61,7 @@ const Pricing: React.FC = () => {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#0A0D0B] text-text-primary font-sans">
+    <div className="min-h-screen bg-background text-text-primary font-sans transition-colors duration-200">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 glass px-6 py-4">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
@@ -100,19 +100,19 @@ const Pricing: React.FC = () => {
               whileHover={{ y: -4 }}
               className={`rounded-2xl p-7 sm:p-9 flex flex-col justify-between transition-all ${
                 plan.isPrimary
-                  ? 'bg-[#121513] border-2 border-accent shadow-2xl relative'
-                  : 'bg-[#121513] border border-[#232B25]'
+                  ? 'bg-surface border-2 border-accent shadow-xl relative'
+                  : 'bg-surface border border-surface-border shadow-sm'
               }`}
             >
               {plan.badge && (
-                <span className="absolute -top-3 right-6 font-mono text-[10px] font-bold text-background bg-accent px-3 py-1 rounded-full uppercase tracking-wider">
+                <span className="absolute -top-3 right-6 font-mono text-[10px] font-bold text-white dark:text-background bg-accent px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
                   {plan.badge}
                 </span>
               )}
 
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-[#1A1F1B] border border-[#242C26] flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-surface-2 border border-surface-border flex items-center justify-center">
                     {plan.icon}
                   </div>
                   <h2 className="font-display font-extrabold text-2xl text-text-primary">
@@ -124,7 +124,7 @@ const Pricing: React.FC = () => {
                   {plan.subtitle}
                 </p>
 
-                <div className="flex items-baseline gap-1 pb-6 mb-6 border-b border-[#1F2521]">
+                <div className="flex items-baseline gap-1 pb-6 mb-6 border-b border-surface-border">
                   <span className="font-mono text-4xl sm:text-5xl font-extrabold text-text-primary">
                     {plan.price}
                   </span>
@@ -143,7 +143,7 @@ const Pricing: React.FC = () => {
                         className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                           plan.isPrimary
                             ? 'bg-accent/20 text-accent'
-                            : 'bg-white/10 text-text-muted'
+                            : 'bg-surface-2 text-text-muted border border-surface-border'
                         }`}
                       >
                         <Check size={11} strokeWidth={3} />
@@ -161,8 +161,8 @@ const Pricing: React.FC = () => {
                 onClick={() => trackEvent('start_free_click', { source: 'pricing_card', plan: plan.title })}
                 className={`w-full py-4 rounded-xl font-bold text-sm text-center transition-all active:scale-[0.98] ${
                   plan.isPrimary
-                    ? 'bg-accent text-background hover:bg-[#ffba33] shadow-[0_4px_20px_rgba(255,176,32,0.2)]'
-                    : 'bg-[#1A1F1B] border border-[#242C26] text-text-primary hover:border-accent'
+                    ? 'bg-accent text-white dark:text-background hover:opacity-95 shadow-[0_4px_20px_rgba(217,119,6,0.25)]'
+                    : 'bg-surface-2 border border-surface-border text-text-primary hover:border-accent'
                 }`}
               >
                 {plan.ctaText}
@@ -172,12 +172,13 @@ const Pricing: React.FC = () => {
         </div>
 
         {/* Pricing Validation Disclaimer */}
-        <div className="mt-14 max-w-2xl mx-auto p-5 rounded-xl bg-[#121513] border border-[#232B25] text-center space-y-2">
-          <p className="font-mono text-xs font-bold text-accent uppercase tracking-wider">
-            Pilot Validation Period
-          </p>
+        <div className="mt-14 max-w-2xl mx-auto p-5 rounded-2xl bg-surface border border-surface-border text-center space-y-2 shadow-sm">
+          <div className="flex items-center justify-center gap-1.5 text-accent font-mono text-xs font-bold uppercase tracking-wider">
+            <ShieldCheck size={14} className="text-accent-whatsapp" />
+            <span>Pilot Validation Period</span>
+          </div>
           <p className="text-xs sm:text-sm text-text-muted leading-relaxed">
-            All early accounts start on the free tier with 15 conversation slots. Paid pricing is currently in pilot testing and subject to merchant feedback.
+            All early accounts start completely free with 15 active conversation slots. Paid pricing (₦4,900/mo) is currently in pilot testing and subject to merchant feedback.
           </p>
         </div>
       </main>

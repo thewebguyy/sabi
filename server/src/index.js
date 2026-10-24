@@ -420,17 +420,65 @@ app.post('/api/webhook/paystack', async (req, res) => {
     if (!metadata?.deal_id || !metadata?.user_id) return;
 
     try {
-      await supabase.from('payments').update({ verified_status: 'verified' }).eq('reference', reference);
-      await supabase.from('deals').update({ status: 'paid', last_contact_time: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', metadata.deal_id);
+      // 1. Idempotency Check: check if payment reference was already verified
+      const { data: existingPayment } = await supabase
+        .from('payments')
+        .select('verified_status')
+        .eq('reference', reference)
+        .maybeSingle();
 
+      if (existingPayment?.verified_status === 'verified') {
+        console.log(`[Paystack Webhook] Reference ${reference} already processed. Skipping.`);
+        return;
+      }
+
+      // 2. Fetch deal and verify merchant ownership
+      const { data: deal } = await supabase
+        .from('deals')
+        .select('id, user_id, amount, status, customer_name')
+        .eq('id', metadata.deal_id)
+        .maybeSingle();
+
+      if (!deal || deal.user_id !== metadata.user_id) {
+        console.error(`[Paystack Webhook] Deal ${metadata.deal_id} not found or user mismatch`);
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      // 3. Mark payment verified
+      await supabase.from('payments').update({ verified_status: 'verified' }).eq('reference', reference);
+
+      // 4. Update deal status to 'won' (respecting DB CHECK constraint: status IN ('open', 'won', 'lost'))
+      await supabase.from('deals').update({
+        status: 'won',
+        won_at: now,
+        last_vendor_contact_at: now,
+        updated_at: now
+      }).eq('id', metadata.deal_id);
+
+      // 5. Insert activity record for audit trail
+      await supabase.from('activities').insert([{
+        user_id: metadata.user_id,
+        deal_id: metadata.deal_id,
+        activity_type: 'won',
+        created_at: now
+      }]);
+
+      // 6. Notify user
       const { data: user } = await supabase.from('users').select('phone').eq('id', metadata.user_id).single();
-      const { data: deal } = await supabase.from('deals').select('contacts(name)').eq('id', metadata.deal_id).single();
       
-      const { data: paid } = await supabase.from('deals').select('amount').eq('user_id', metadata.user_id).eq('status', 'paid').gte('updated_at', new Date().setHours(0,0,0,0));
-      const todayTotal = paid?.reduce((s,d) => s + (Number(d.amount)||0), 0) || 0;
+      const { data: wonDeals } = await supabase
+        .from('deals')
+        .select('amount')
+        .eq('user_id', metadata.user_id)
+        .eq('status', 'won')
+        .gte('won_at', new Date(new Date().setHours(0,0,0,0)).toISOString());
+        
+      const todayTotal = wonDeals?.reduce((s,d) => s + (Number(d.amount)||0), 0) || 0;
 
       if (user?.phone) {
-        await sendWhatsApp(user.phone, `💰 Payment confirmed — ₦${amount/100} received from ${deal?.contacts?.name || 'customer'}.\nDeal closed. Today's total: ₦${todayTotal}`);
+        await sendWhatsApp(user.phone, `💰 Payment confirmed — ₦${amount/100} received from ${deal.customer_name || 'customer'}.\nDeal closed as WON. Today's recovered revenue: ₦${todayTotal.toLocaleString('en-NG')}`);
       }
     } catch (err) {
       console.error('[Paystack webhook handler]', err.message);

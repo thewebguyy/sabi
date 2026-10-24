@@ -28,6 +28,7 @@ interface SabiState {
   markWon: (id: string) => Promise<void>;
   markLost: (id: string) => Promise<void>;
   recordVendorContact: (id: string) => Promise<void>;
+  recordFollowupAttempt: (id: string) => Promise<void>;
 }
 
 export const useStore = create<SabiState>()(
@@ -194,6 +195,17 @@ export const useStore = create<SabiState>()(
             user_id: user.id,
             deal_id: id,
             activity_type: 'lost'
+          }])
+        }
+      },
+
+      recordFollowupAttempt: async (id) => {
+        const { user } = get()
+        if (user) {
+          await supabase.from('activities').insert([{
+            user_id: user.id,
+            deal_id: id,
+            activity_type: 'followup_copied'
           }])
         }
       },

@@ -12,6 +12,7 @@ export const Today: React.FC = () => {
 
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
   const [copied, setCopied] = useState(false)
+  const [pendingConfirmationDeal, setPendingConfirmationDeal] = useState<Deal | null>(null)
 
   const now = new Date().getTime()
   const openDeals = deals.filter(d => d.status === 'open')
@@ -24,8 +25,10 @@ export const Today: React.FC = () => {
   })
 
   const sortedDeals = [...dealsNeedingAttention].sort((a, b) => {
-    const hoursA = (now - new Date(a.last_vendor_contact_at).getTime()) / (1000 * 60 * 60)
-    const hoursB = (now - new Date(b.last_vendor_contact_at).getTime()) / (1000 * 60 * 60)
+    const timeA = new Date(a.last_vendor_contact_at).getTime()
+    const timeB = new Date(b.last_vendor_contact_at).getTime()
+    const hoursA = Math.max(0, (now - (isNaN(timeA) ? now : timeA)) / (1000 * 60 * 60))
+    const hoursB = Math.max(0, (now - (isNaN(timeB) ? now : timeB)) / (1000 * 60 * 60))
     const scoreA = Number(a.amount || 0) * Math.log(hoursA + 1)
     const scoreB = Number(b.amount || 0) * Math.log(hoursB + 1)
     return scoreB - scoreA
@@ -37,7 +40,8 @@ export const Today: React.FC = () => {
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(val)
 
   const getDaysQuiet = (dateStr: string) => {
-    const diffMs = now - new Date(dateStr).getTime()
+    const parsedTime = new Date(dateStr).getTime()
+    const diffMs = isNaN(parsedTime) ? 0 : Math.max(0, now - parsedTime)
     const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
     if (days <= 0) {
       const hours = Math.floor(diffMs / (1000 * 60 * 60))
@@ -49,19 +53,27 @@ export const Today: React.FC = () => {
   const generateDefaultMessage = (deal: Deal) =>
     `Hi ${deal.customer_name}! Just checking in on your order for ${deal.product_name} (${formatCurrency(deal.amount)}). Let me know if you are still taking it so I can reserve it for you! 😊`
 
-  const handleCopyMessage = (text: string) => {
+  const handleCopyMessage = (deal: Deal, text: string) => {
     navigator.clipboard.writeText(text)
+    useStore.getState().recordFollowupAttempt(deal.id)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const handleOpenWhatsApp = (deal: Deal, message: string) => {
-    recordVendorContact(deal.id)
+    useStore.getState().recordFollowupAttempt(deal.id)
     trackMilestone('first_followup', { deal_id: deal.id, amount: deal.amount })
     trackEvent('whatsapp_opened', { deal_id: deal.id, customer_phone: deal.customer_phone ? 'present' : 'none' })
     const encoded = encodeURIComponent(message)
     const cleanPhone = deal.customer_phone ? deal.customer_phone.replace(/\D/g, '') : ''
     window.open(cleanPhone ? `https://wa.me/${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`, '_blank')
+    setPendingConfirmationDeal(deal)
+  }
+
+  const handleConfirmSent = (deal: Deal) => {
+    recordVendorContact(deal.id)
+    setPendingConfirmationDeal(null)
+    setSelectedDeal(null)
   }
 
   const handleMarkWon = (deal: Deal) => {
@@ -184,19 +196,47 @@ export const Today: React.FC = () => {
                   value={generateDefaultMessage(selectedDeal)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button onClick={() => handleCopyMessage(generateDefaultMessage(selectedDeal))}
-                  className="bg-surface-2 text-text-primary font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
-                >
-                  {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
-                  <span>{copied ? 'Copied!' : 'Copy Text'}</span>
-                </button>
-                <button onClick={() => { handleOpenWhatsApp(selectedDeal, generateDefaultMessage(selectedDeal)); setSelectedDeal(null) }}
-                  className="bg-accent-whatsapp text-background font-extrabold py-3 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_15px_rgba(37,211,102,0.2)]"
-                >
-                  <ExternalLink size={16} /><span>Open WhatsApp</span>
-                </button>
-              </div>
+
+              {pendingConfirmationDeal?.id === selectedDeal.id ? (
+                <div className="p-4 bg-accent/10 border border-accent/30 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-accent shrink-0" />
+                    <p className="text-xs font-bold text-text-primary">Did you send the message to {selectedDeal.customer_name}?</p>
+                  </div>
+                  <p className="text-[11px] text-text-muted">
+                    Confirming will reset the silence timer for 48 hours. If not sent, this chat stays in your Today queue.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={() => { setPendingConfirmationDeal(null); setSelectedDeal(null) }}
+                      className="bg-surface-2 text-text-primary font-bold py-2.5 rounded-xl text-xs active:scale-95 transition-all"
+                    >
+                      Not Yet (Keep in Queue)
+                    </button>
+                    <button
+                      onClick={() => handleConfirmSent(selectedDeal)}
+                      className="bg-success text-white font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all shadow-md"
+                    >
+                      <Check size={14} />
+                      <span>Yes, Sent!</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button onClick={() => handleCopyMessage(selectedDeal, generateDefaultMessage(selectedDeal))}
+                    className="bg-surface-2 text-text-primary font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  >
+                    {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
+                    <span>{copied ? 'Copied!' : 'Copy Text'}</span>
+                  </button>
+                  <button onClick={() => handleOpenWhatsApp(selectedDeal, generateDefaultMessage(selectedDeal))}
+                    className="bg-accent-whatsapp text-background font-extrabold py-3 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_15px_rgba(37,211,102,0.2)]"
+                  >
+                    <ExternalLink size={16} /><span>Open WhatsApp</span>
+                  </button>
+                </div>
+              )}
             </motion.div>
           </div>
         )}

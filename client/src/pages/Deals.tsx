@@ -16,8 +16,10 @@ export const Deals: React.FC = () => {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(val)
   }
 
+  const [confirmDealId, setConfirmDealId] = useState<string | null>(null)
+
   const handleQuickFollowUp = (id: string, phone: string | null, product: string, amount: number, name: string) => {
-    recordVendorContact(id)
+    useStore.getState().recordFollowupAttempt(id)
     const msg = `Hi ${name}! Following up on your order for ${product} (${formatCurrency(amount)}). Let me know if you are ready so I can prepare it for you!`
     const encoded = encodeURIComponent(msg)
     if (phone) {
@@ -25,6 +27,12 @@ export const Deals: React.FC = () => {
     } else {
       window.open(`https://wa.me/?text=${encoded}`, '_blank')
     }
+    setConfirmDealId(id)
+  }
+
+  const handleConfirmSent = (id: string) => {
+    recordVendorContact(id)
+    setConfirmDealId(null)
   }
 
   return (
@@ -90,28 +98,50 @@ export const Deals: React.FC = () => {
                 )}
 
                 {filter === 'open' && (
-                  <div className="flex items-center gap-2 pt-1 border-t border-surface-border/50">
-                    <button
-                      onClick={() => handleQuickFollowUp(deal.id, deal.customer_phone, deal.product_name, deal.amount, deal.customer_name)}
-                      className="flex-1 bg-accent-whatsapp/15 text-accent-whatsapp border border-accent-whatsapp/30 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-                    >
-                      <MessageCircle size={14} />
-                      <span>WhatsApp Nudge</span>
-                    </button>
-                    <button
-                      onClick={() => markWon(deal.id)}
-                      className="bg-success/15 text-success border border-success/30 p-2 rounded-xl hover:bg-success/25 active:scale-95 transition-all"
-                      title="Mark Won"
-                    >
-                      <CheckCircle2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => markLost(deal.id)}
-                      className="bg-danger/15 text-danger border border-danger/30 p-2 rounded-xl hover:bg-danger/25 active:scale-95 transition-all"
-                      title="Mark Lost"
-                    >
-                      <XCircle size={16} />
-                    </button>
+                  <div className="space-y-2 pt-1 border-t border-surface-border/50">
+                    {confirmDealId === deal.id ? (
+                      <div className="flex items-center justify-between gap-2 bg-accent/10 border border-accent/30 p-2.5 rounded-xl">
+                        <span className="text-[11px] font-semibold text-text-primary">Sent message in WhatsApp?</span>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setConfirmDealId(null)}
+                            className="bg-surface-2 text-text-muted hover:text-text-primary px-2.5 py-1 rounded-lg text-xs font-bold"
+                          >
+                            No
+                          </button>
+                          <button
+                            onClick={() => handleConfirmSent(deal.id)}
+                            className="bg-success text-white px-3 py-1 rounded-lg text-xs font-bold shadow-sm"
+                          >
+                            Yes, Sent
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleQuickFollowUp(deal.id, deal.customer_phone, deal.product_name, deal.amount, deal.customer_name)}
+                          className="flex-1 bg-accent-whatsapp/15 text-accent-whatsapp border border-accent-whatsapp/30 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        >
+                          <MessageCircle size={14} />
+                          <span>WhatsApp Nudge</span>
+                        </button>
+                        <button
+                          onClick={() => markWon(deal.id)}
+                          className="bg-success/15 text-success border border-success/30 p-2 rounded-xl hover:bg-success/25 active:scale-95 transition-all"
+                          title="Mark Won"
+                        >
+                          <CheckCircle2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => markLost(deal.id)}
+                          className="bg-danger/15 text-danger border border-danger/30 p-2 rounded-xl hover:bg-danger/25 active:scale-95 transition-all"
+                          title="Mark Lost"
+                        >
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

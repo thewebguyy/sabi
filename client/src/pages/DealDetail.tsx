@@ -41,8 +41,10 @@ const DealDetail: React.FC = () => {
     )
   }
 
+  const [showConfirmSent, setShowConfirmSent] = useState(false)
+
   const handleFollowUp = () => {
-    recordVendorContact(deal.id)
+    useStore.getState().recordFollowupAttempt(deal.id)
     const msg = `Hi ${deal.customer_name}! Following up on your order for ${deal.product_name} (${formatNaira(deal.amount)}). Let me know if you are ready so I can prepare it!`
     const encoded = encodeURIComponent(msg)
     if (deal.customer_phone) {
@@ -50,6 +52,12 @@ const DealDetail: React.FC = () => {
     } else {
       window.open(`https://wa.me/?text=${encoded}`, '_blank')
     }
+    setShowConfirmSent(true)
+  }
+
+  const handleConfirmSent = () => {
+    recordVendorContact(deal.id)
+    setShowConfirmSent(false)
   }
 
   return (
