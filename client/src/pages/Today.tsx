@@ -86,16 +86,30 @@ export const Today: React.FC = () => {
     markLost(deal.id)
   }
 
+  const wonDeals = deals.filter(d => d.status === 'won')
+  const totalRecoveredRevenue = wonDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0)
+
   return (
     <div className="space-y-6">
       {/* Header Metric Box */}
       <div className="bg-surface rounded-3xl border border-surface-border p-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-2xl pointer-events-none" />
-        <p className="text-xs font-bold uppercase tracking-wider text-text-muted mb-1">Total Open Value</p>
-        <h2 className="text-3xl font-extrabold font-mono text-accent">
-          {formatCurrency(totalOpenValue)}
-        </h2>
-        <p className="text-xs text-text-muted mt-1">in open opportunities</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1">Open Pipeline</p>
+            <h2 className="text-2xl font-extrabold font-mono text-accent">
+              {formatCurrency(totalOpenValue)}
+            </h2>
+            <p className="text-[11px] text-text-muted mt-0.5">{openDeals.length} active quotes</p>
+          </div>
+          <div className="border-l border-surface-border pl-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-success mb-1">Recovered Revenue</p>
+            <h2 className="text-2xl font-extrabold font-mono text-success">
+              {formatCurrency(totalRecoveredRevenue)}
+            </h2>
+            <p className="text-[11px] text-text-muted mt-0.5">{wonDeals.length} deals closed</p>
+          </div>
+        </div>
 
         <div className="mt-4 pt-4 border-t border-surface-border flex items-center justify-between">
           <div className="flex items-center gap-2">

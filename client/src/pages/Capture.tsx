@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore, DEFAULT_FOLLOW_UP_DELAY_HOURS } from '../store/useStore'
 import { useToast } from '../context/ToastContext'
 import { trackMilestone } from '../lib/analytics'
+import { parseNigerianChat } from '../lib/chatParser'
 
 export const Capture: React.FC = () => {
   const [searchParams] = useSearchParams()
@@ -53,6 +54,9 @@ export const Capture: React.FC = () => {
    * - Nigerian currency syntax: ₦60,000, 60k, N60000, 60,000 naira
    * - Delivery constraints: Lekki, Abuja, dispatch, waybill, Friday, pickup
    */
+  const [dueHours, setDueHours] = useState(DEFAULT_FOLLOW_UP_DELAY_HOURS)
+  const [isAmountAmbiguous, setIsAmountAmbiguous] = useState(false)
+
   const handleExtract = () => {
     if (!rawText.trim()) return
     setExtracting(true)
@@ -60,79 +64,17 @@ export const Capture: React.FC = () => {
 
     setTimeout(() => {
       try {
-        const text = rawText.trim()
-        const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+        const parsed = parseNigerianChat(rawText)
 
-        // 1. Extract Phone Number if present
-        let detectedPhone = ''
-        const phoneMatch = text.match(/(?:\+234|0)(?:70|80|81|90|91)\d{8}/)
-        if (phoneMatch) {
-          detectedPhone = phoneMatch[0]
-        }
+        setCustomerName(parsed.customerName)
+        setCustomerPhone(parsed.customerPhone)
+        setProductName(parsed.productName)
+        setAmount(parsed.amount ? parsed.amount.toString() : '0')
+        setConstraint(parsed.constraint)
+        setDueHours(parsed.followUpDueHours)
+        setIsAmountAmbiguous(parsed.isAmountAmbiguous)
 
-        // 2. Extract Amount
-        let parsedAmount = 0
-        // Check for 60k, 185k shorthand
-        const kMatch = text.match(/(\d+)\s*(?:k|thousand)\b/i)
-        // Check for ₦, N, NGN prefix or standard currency
-        const standardAmountMatch = text.match(/(?:₦|N|NGN|\b)\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,7})/i)
-
-        if (kMatch) {
-          parsedAmount = parseFloat(kMatch[1]) * 1000
-        } else if (standardAmountMatch) {
-          const clean = standardAmountMatch[1].replace(/,/g, '')
-          parsedAmount = parseFloat(clean) || 0
-        }
-
-        // 3. Extract Customer Name
-        // Strip WhatsApp timestamp prefixes like "[10:24 AM] Ada: " or "10/24/26, 2:14 PM - Ada: "
-        let detectedName = ''
-        for (const line of lines) {
-          const chatMatch = line.match(/(?:\[?\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?\]?|\d{1,2}\/\d{1,2}\/\d{2,4}.*?[-:]\s*)([^:]{2,25}):/i)
-          if (chatMatch) {
-            const candidate = chatMatch[1].trim()
-            if (!/^(you|me|vendor|admin|seller)$/i.test(candidate)) {
-              detectedName = candidate
-              break
-            }
-          }
-        }
-
-        if (!detectedName) {
-          // If no timestamp, look for "Ada:" or take first line if short
-          const colonMatch = lines[0]?.match(/^([^:]{2,20}):/)
-          if (colonMatch) {
-            detectedName = colonMatch[1].trim()
-          } else {
-            const firstLine = lines[0] || 'WhatsApp Customer'
-            detectedName = firstLine.length > 25 ? 'WhatsApp Customer' : firstLine
-          }
-        }
-
-        // 4. Extract Constraint / Location
-        let detectedConstraint = ''
-        const constraintKeywords = text.match(/(?:deliver(?:y)? to|waybill to|dispatch to|pickup at|hold till|send to)\s+([^,.\n]+)/i)
-        if (constraintKeywords) {
-          detectedConstraint = constraintKeywords[0].trim()
-        }
-
-        // 5. Extract Product Name
-        // Look for common merchandise keywords or fallback to 2nd line
-        let detectedProduct = ''
-        const merchandiseMatch = text.match(/(?:for the|about the|on the|price of|buy|order)\s+([^?!\n.,]{3,40})/i)
-        if (merchandiseMatch) {
-          detectedProduct = merchandiseMatch[1].trim()
-        } else {
-          detectedProduct = lines.find((l) => l.length > 5 && !l.includes(detectedName))?.slice(0, 40) || 'Inquired Item'
-        }
-
-        setCustomerName(detectedName)
-        setCustomerPhone(detectedPhone)
-        setProductName(detectedProduct)
-        setAmount(parsedAmount ? parsedAmount.toString() : '0')
-        setConstraint(detectedConstraint)
-
-        trackMilestone('first_capture', { text_length: rawText.length, has_amount: parsedAmount > 0 })
+        trackMilestone('first_capture', { text_length: rawText.length, has_amount: parsed.amount > 0 })
         setShowConfirm(true)
       } catch (err) {
         console.error('[Parser error]', err)
@@ -152,7 +94,8 @@ export const Capture: React.FC = () => {
     setError(null)
     try {
       const now = new Date()
-      const dueTime = new Date(now.getTime() + DEFAULT_FOLLOW_UP_DELAY_HOURS * 3600 * 1000).toISOString()
+      const effectiveHours = (dueHours && dueHours > 0) ? dueHours : DEFAULT_FOLLOW_UP_DELAY_HOURS
+      const dueTime = new Date(now.getTime() + effectiveHours * 3600 * 1000).toISOString()
 
       await createDeal({
         customer_name: customerName.trim(),
@@ -311,17 +254,29 @@ export const Capture: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
-                Amount (₦)
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
+                  Amount (₦)
+                </label>
+                {(isAmountAmbiguous || parseFloat(amount) === 0) && (
+                  <span className="text-[10px] text-accent font-semibold flex items-center gap-1">
+                    <AlertCircle size={12} /> Please confirm price
+                  </span>
+                )}
+              </div>
               <input
                 required
                 type="number"
                 min="0"
                 step="500"
-                className="w-full bg-surface-2 border border-surface-border rounded-xl py-3 px-3.5 text-xs font-mono font-bold text-accent outline-none focus:border-accent"
+                className={`w-full bg-surface-2 border rounded-xl py-3 px-3.5 text-xs font-mono font-bold text-accent outline-none focus:border-accent ${
+                  isAmountAmbiguous || parseFloat(amount) === 0 ? 'border-accent ring-1 ring-accent/30' : 'border-surface-border'
+                }`}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value)
+                  if (parseFloat(e.target.value) > 0) setIsAmountAmbiguous(false)
+                }}
               />
             </div>
 

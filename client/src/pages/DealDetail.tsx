@@ -105,14 +105,35 @@ const DealDetail: React.FC = () => {
       <div className="space-y-3">
         {deal.status === 'open' && (
           <>
-            <button
-              onClick={handleFollowUp}
-              className="w-full bg-[#25D366] text-[#0A0A0A] font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(37,211,102,0.2)]"
-            >
-              <MessageSquare size={16} />
-              <span>Nudge via WhatsApp</span>
-              <ExternalLink size={14} />
-            </button>
+            {showConfirmSent ? (
+              <div className="bg-[#1C1C1E] border border-[#FFB020]/40 rounded-2xl p-4 space-y-3">
+                <p className="text-xs font-bold text-[#F3F2EF]">Did you send the follow-up message in WhatsApp?</p>
+                <p className="text-[11px] text-[#8E8E93]">Confirming resets the 48-hour silence timer. If cancelled, it remains due for attention.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setShowConfirmSent(false)}
+                    className="bg-[#262626] text-[#8E8E93] hover:text-[#F3F2EF] py-2.5 rounded-xl text-xs font-bold"
+                  >
+                    Not Yet
+                  </button>
+                  <button
+                    onClick={handleConfirmSent}
+                    className="bg-[#10B981] text-white py-2.5 rounded-xl text-xs font-bold shadow-md"
+                  >
+                    Yes, Sent!
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleFollowUp}
+                className="w-full bg-[#25D366] text-[#0A0A0A] font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-[0_0_20px_rgba(37,211,102,0.2)]"
+              >
+                <MessageSquare size={16} />
+                <span>Nudge via WhatsApp</span>
+                <ExternalLink size={14} />
+              </button>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <button
