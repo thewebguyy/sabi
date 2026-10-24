@@ -4,6 +4,7 @@ import { ChevronRight, ArrowRight, MessageCircle, Clock, ExternalLink, ShieldChe
 import { Link } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 
+import HeroVisualAnchor from '../components/landing/HeroVisualAnchor'
 import ChatSimulator from '../components/landing/ChatSimulator'
 import HowItWorks from '../components/landing/HowItWorks'
 import ProductScreenshots from '../components/landing/ProductScreenshots'
@@ -156,88 +157,9 @@ const Landing: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right Column: Live Product Today Queue representation */}
+              {/* Right Column: Dynamic Live Queue & 1-Tap Action Anchor */}
               <div className="lg:col-span-5">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.15 }}
-                  className="bg-surface rounded-2xl border border-surface-border p-5 shadow-xl space-y-4"
-                >
-                  {/* Top instrumentation */}
-                  <div className="flex justify-between items-start pb-3 border-b border-surface-border">
-                    <div>
-                      <span className="editorial-kicker">TOTAL OPEN OPPORTUNITY</span>
-                      <p className="font-mono text-3xl font-extrabold text-accent">₦710,000</p>
-                    </div>
-                    <span className="font-mono text-[10px] text-accent bg-surface-2 border border-accent/30 px-2.5 py-1 rounded font-bold">
-                      4 CHATS QUIET
-                    </span>
-                  </div>
-
-                  {/* High-priority deal card: Tech / Phone vertical */}
-                  <div className="bg-surface-2 rounded-xl border border-accent/40 p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-text-primary">Tunde B.</span>
-                          <span className="font-mono text-[10px] bg-accent/15 text-accent px-2 py-0.5 rounded border border-accent/30 font-bold">
-                            28 HOURS QUIET
-                          </span>
-                        </div>
-                        <p className="text-xs text-text-muted mt-0.5">Refurbished iPhone 13 (128GB Blue)</p>
-                      </div>
-                      <span className="font-mono text-sm font-bold text-accent">₦420,000</span>
-                    </div>
-
-                    <div className="bg-surface rounded-lg p-3 border border-surface-border space-y-1">
-                      <p className="font-mono text-[9px] uppercase tracking-wider text-text-muted">
-                        PRE-COMPOSED WHATSAPP MESSAGE
-                      </p>
-                      <p className="text-xs text-text-primary italic leading-relaxed">
-                        "Hey boss Tunde! Following up on the blue iPhone 13 (₦420,000). Another buyer is asking at Computer Village, but keeping it set aside for you first..."
-                      </p>
-                    </div>
-
-                    <Link
-                      to="/auth"
-                      onClick={() => trackEvent('start_free_click', { source: 'hero_today_preview' })}
-                      className="w-full bg-[#25D366] text-[#0A0D0B] font-extrabold py-2.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 hover:bg-[#22c35e] transition-all shadow-sm"
-                    >
-                      <MessageCircle size={14} />
-                      <span>Follow up with Tunde — ₦420,000</span>
-                    </Link>
-                  </div>
-
-                  {/* Secondary quiet deals: Fashion and Hair verticals */}
-                  <div className="space-y-2">
-                    <div className="bg-surface-2 rounded-xl border border-surface-border p-3 flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-text-primary">Blessing E.</span>
-                          <span className="font-mono text-[9px] text-text-muted">3 days quiet · Abuja</span>
-                        </div>
-                        <p className="text-[11px] text-text-muted">28" Bone Straight 3-Bundle</p>
-                      </div>
-                      <span className="font-mono text-xs font-bold text-accent">₦185,000</span>
-                    </div>
-
-                    <div className="bg-surface-2 rounded-xl border border-surface-border p-3 flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-text-primary">Amaka O.</span>
-                          <span className="font-mono text-[9px] text-text-muted">2 days quiet · Lekki</span>
-                        </div>
-                        <p className="text-[11px] text-text-muted">Burgundy Swiss Lace (5 yds)</p>
-                      </div>
-                      <span className="font-mono text-xs font-bold text-accent">₦60,000</span>
-                    </div>
-                  </div>
-
-                  <p className="text-center font-mono text-[10px] text-text-muted pt-1">
-                    REALISTIC DEMONSTRATION · SABI TODAY QUEUE
-                  </p>
-                </motion.div>
+                <HeroVisualAnchor />
               </div>
             </div>
           </div>
